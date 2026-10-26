@@ -4,13 +4,15 @@ import { parseFeed, discoverFeeds, pageTitle } from './feed-parser.js';
 import { sanitizeHtml, htmlToText } from './sanitize.js';
 import {
   createFeed, createGroup, getFeed, getFeedByUrl, insertItems, listFeeds, listGroups,
-  markFeedFetch, updateFeedMeta,
+  markFeedFetch, trimFeedItems, updateFeedMeta,
 } from './db.js';
 
-export const UA = 'Mozilla/5.0 (compatible; AntReader/1.0; +https://rss.xbta.cc)';
+export const UA = 'Mozilla/5.0 (compatible; AntReader/1.1; +https://ant.xbta.cc)';
 const MAX_BYTES = 6 * 1024 * 1024;
-const MAX_ITEMS_PER_FETCH = 60;
+const MAX_ITEMS_PER_FETCH = 100;
 const MAX_CONTENT_CHARS = 200000;
+/** 每个源保留的历史条数上限 */
+const FEED_KEEP_ITEMS = 200;
 
 async function readLimited(res, maxBytes = MAX_BYTES) {
   const declared = parseInt(res.headers.get('content-length') || '0', 10);
@@ -105,6 +107,9 @@ export async function syncFeed(env, feed) {
 
   const added = await insertItems(env.DB, feed.id, prepared);
 
+  // 每个源只保留最近 FEED_KEEP_ITEMS 条
+  const trimmed = await trimFeedItems(env.DB, feed.id, FEED_KEEP_ITEMS);
+
   if (!feed.title && parsed.title) {
     await updateFeedMeta(env.DB, feed.id, {
       title: parsed.title,
@@ -112,7 +117,7 @@ export async function syncFeed(env, feed) {
     });
   }
   await markFeedFetch(env.DB, feed.id, 'ok', null);
-  return { added, total: prepared.length };
+  return { added, trimmed, total: prepared.length };
 }
 
 /**

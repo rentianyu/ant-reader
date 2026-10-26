@@ -118,12 +118,13 @@ export async function insertItems(db, feedId, items) {
 }
 
 export async function listItems(db, opts = {}) {
-  const { feedId, groupId, unreadOnly, starredOnly, limit = 40, offset = 0, q } = opts;
+  const { feedId, groupId, unreadOnly, readOnly, starredOnly, limit = 40, offset = 0, q } = opts;
   const where = [];
   const binds = [];
   if (feedId) { where.push('i.feed_id = ?'); binds.push(feedId); }
   if (groupId) { where.push('f.group_id = ?'); binds.push(groupId); }
   if (unreadOnly) where.push('i.is_read = 0');
+  if (readOnly) where.push('i.is_read = 1');
   if (starredOnly) where.push('i.is_starred = 1');
   if (q) { where.push('(i.title LIKE ? OR i.summary LIKE ?)'); binds.push(`%${q}%`, `%${q}%`); }
 
@@ -176,6 +177,43 @@ export async function markAllRead(db, { feedId, groupId } = {}) {
     binds.push(groupId);
   }
   const res = await db.prepare(sql).bind(...binds).run();
+  return res.meta?.changes || 0;
+}
+
+/**
+ * 把某篇文章及其更早的未读一次性标为已读。
+ * 范围由 feedId / groupId 决定，都不传则为全部订阅。
+ */
+export async function markBefore(db, { itemId, feedId, groupId }) {
+  const item = await db.prepare(
+    'SELECT feed_id, COALESCE(published_at, fetched_at) AS ts FROM items WHERE id = ?',
+  ).bind(itemId).first();
+  if (!item) return { changed: 0, ts: null };
+
+  let sql = 'UPDATE items SET is_read = 1 WHERE is_read = 0 AND COALESCE(published_at, fetched_at) <= ?';
+  const binds = [item.ts];
+  if (feedId) {
+    sql += ' AND feed_id = ?';
+    binds.push(feedId);
+  } else if (groupId) {
+    sql += ' AND feed_id IN (SELECT id FROM feeds WHERE group_id = ?)';
+    binds.push(groupId);
+  }
+  const res = await db.prepare(sql).bind(...binds).run();
+  return { changed: res.meta?.changes || 0, ts: item.ts };
+}
+
+/** 每个源最多保留 keep 条历史（按发布时间倒序），超出的删最旧 */
+export async function trimFeedItems(db, feedId, keep = 200) {
+  const res = await db.prepare(`
+    DELETE FROM items
+    WHERE feed_id = ?
+      AND id NOT IN (
+        SELECT id FROM items WHERE feed_id = ?
+        ORDER BY COALESCE(published_at, fetched_at) DESC, id DESC
+        LIMIT ?
+      )
+  `).bind(feedId, feedId, keep).run();
   return res.meta?.changes || 0;
 }
 

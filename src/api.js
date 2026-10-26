@@ -237,6 +237,7 @@ export async function handleApi(request, env, url) {
         feedId: q.get('feed_id') ? parseInt(q.get('feed_id'), 10) : null,
         groupId: q.get('group_id') ? parseInt(q.get('group_id'), 10) : null,
         unreadOnly: q.get('unread') === '1',
+        readOnly: q.get('read') === '1',
         starredOnly: q.get('starred') === '1',
         limit: Math.min(parseInt(q.get('limit') || '40', 10) || 40, 100),
         offset: Math.max(parseInt(q.get('offset') || '0', 10) || 0, 0),
@@ -260,6 +261,23 @@ export async function handleApi(request, env, url) {
         const fresh = await db.getItem(env.DB, id);
         return json({ ok: true, item: fresh });
       }
+    }
+
+    /** 把某篇及其更早的未读全部标为已读（当前列表范围内） */
+    if (path === '/read-before' && method === 'POST') {
+      const body = await readJson(request);
+      const itemId = parseInt(body?.itemId, 10);
+      if (!itemId) return fail('缺少 itemId');
+      const r = await db.markBefore(env.DB, {
+        itemId,
+        feedId: body?.feedId ? parseInt(body.feedId, 10) : null,
+        groupId: body?.groupId ? parseInt(body.groupId, 10) : null,
+      });
+      return json({
+        ok: true, changed: r.changed, ts: r.ts,
+        feeds: await db.listFeeds(env.DB),
+        groups: await db.listGroups(env.DB),
+      });
     }
 
     if (path === '/read-all' && method === 'POST') {

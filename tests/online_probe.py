@@ -100,7 +100,19 @@ def main():
           return {n: items.length, avg: Math.round(h), per: Math.floor(vh / h), vh: Math.round(vh)};
         })()""")
         print("列表:", metric)
+        print("标题行数:", ev(ws, """(() => {
+          const t = document.querySelector('.it-title');
+          const lh = parseFloat(getComputedStyle(t).lineHeight) || 21;
+          return Math.round(t.getBoundingClientRect().height / lh);
+        })()"""))
         shot(ws, "online-2-list.png")
+
+        # 滑到底，看已读段是否追加（只读操作，不改数据）
+        ev(ws, "document.getElementById('item-list').scrollTop = 99999")
+        time.sleep(3.5)
+        print("已读分隔出现:", ev(ws, "!!document.querySelector('.seg-divider')"))
+        print("列表总条数:", ev(ws, "document.querySelectorAll('.item').length"))
+        shot(ws, "online-3-read-seg.png")
         ws.close()
     finally:
         chrome.terminate()

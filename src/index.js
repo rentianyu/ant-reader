@@ -44,9 +44,9 @@ export default {
 
       await Promise.all(Array.from({ length: Math.min(concurrency, feeds.length) }, worker));
 
-      // 保留策略：已读且非收藏、超过 180 天的文章自动清理
+      // 保留策略：默认不按天数清理（每个源 200 条的硬上限在抓取时已处理）
       try {
-        const retention = parseInt(await getSetting(env.DB, 'retention_days', '180'), 10);
+        const retention = parseInt(await getSetting(env.DB, 'retention_days', '0'), 10);
         if (retention > 0) {
           const cutoff = Date.now() - retention * 86400000;
           await env.DB.prepare('DELETE FROM items WHERE is_read = 1 AND is_starred = 0 AND COALESCE(published_at, fetched_at) < ?')

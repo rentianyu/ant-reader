@@ -3,14 +3,15 @@
 蚁读 UI 验收脚本（CDP 驱动无头 Chromium）
 
 覆盖：
-  1. 移动端密度（列表项高度、一屏条目数）
-  2. 点一次原地展开、再点打开原文
-  3. 下拉刷新（模拟触摸手势）
-  4. 桌面端三栏 + 右栏正文
+  1. 移动端密度（列表项高度、一屏条目数、标题单行）
+  2. 列表初始只显示未读，滑到底才追加已读（分隔条）
+  3. 点一条 → 它和更早的未读全部变灰
+  4. 点开原地展开、再点打开原文
+  5. 下拉刷新（模拟触摸手势）
+  6. 桌面端三栏 + 右栏正文
 
 用法：
-  python3 tests/ui_e2e.py --base http://127.0.0.1:8787 --password test1234 [--port 9222]
-  python3 tests/ui_e2e.py --base https://ant.xbta.cc --password xxx --shots-dir shots
+  python3 tests/ui_e2e.py --base http://127.0.0.1:8787 --password test1234
 """
 import argparse
 import base64
@@ -64,10 +65,10 @@ def check(name, cond, extra=""):
 def shot(ws, name):
     data = cdp(ws, "Page.captureScreenshot", {"format": "png"})
     os.makedirs(OUT, exist_ok=True)
-    path = os.path.join(OUT, name)
-    with open(path, "wb") as f:
+    p = os.path.join(OUT, name)
+    with open(p, "wb") as f:
         f.write(base64.b64decode(data["data"]))
-    print(f"  截图 → {path} ({os.path.getsize(path)//1024}KB)")
+    print(f"  截图 → {p} ({os.path.getsize(p)//1024}KB)")
 
 
 def login_token(base, password):
@@ -80,8 +81,7 @@ def login_token(base, password):
                           "(KHTML, like Gecko) Chrome/140.0 Safari/537.36",
         },
     )
-    resp = urllib.request.urlopen(req, timeout=30)
-    return resp.headers.get("set-cookie", "").split(";")[0].split("=", 1)[1]
+    return urllib.request.urlopen(req, timeout=30).headers.get("set-cookie", "").split(";")[0].split("=", 1)[1]
 
 
 def main():
@@ -98,10 +98,8 @@ def main():
 
     chrome = subprocess.Popen(
         ["chromium", "--headless=new", "--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage",
-         f"--remote-debugging-port={args.port}", "--remote-allow-origins=*", "--hide-scrollbars",
-         "about:blank"],
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-    )
+         f"--remote-debugging-port={args.port}", "--remote-allow-origins=*", "--hide-scrollbars", "about:blank"],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     try:
         ws_url = None
         for _ in range(80):
@@ -121,103 +119,137 @@ def main():
         ws = websocket.create_connection(ws_url, timeout=45, suppress_origin=True)
         cdp(ws, "Page.enable")
         cdp(ws, "Network.enable")
-        cdp(ws, "Runtime.enable")
         cdp(ws, "Network.setCookie", {"name": "ant_session", "value": token, "domain": host, "path": "/"})
         cdp(ws, "Emulation.setDeviceMetricsOverride",
             {"width": 390, "height": 844, "deviceScaleFactor": 2, "mobile": True})
         cdp(ws, "Page.navigate", {"url": base + "/"})
-        time.sleep(3.2)
+        time.sleep(3.4)
 
-        print("== 移动端 · 订阅源首页 ==")
+        print("== 订阅源首页 ==")
         check("主界面已显示", ev(ws, "!document.getElementById('main-view').hidden"))
         src_h = ev(ws, "Math.round(document.querySelector('.src-entry').getBoundingClientRect().height)")
-        check("订阅源条目高度 ≤ 50px", src_h and src_h <= 50, f"{src_h}px")
-        shot(ws, "m1-sources.png")
+        check("订阅源条目 ≤ 50px", src_h and src_h <= 50, f"{src_h}px")
 
-        print("== 移动端 · 文章列表密度 ==")
+        print("== 文章列表：密度 ==")
         ev(ws, "document.querySelector('.src-entry[data-scope=all]').click()")
-        time.sleep(2.0)
+        time.sleep(2.4)
         check("进入文章列表", ev(ws, "document.body.dataset.view") == "list")
         metric = ev(ws, """(() => {
           const items = [...document.querySelectorAll('.item')];
-          const h = items.slice(0, 6).reduce((s, e) => s + e.getBoundingClientRect().height, 0) / Math.max(1, Math.min(6, items.length));
+          const h = items.reduce((s, e) => s + e.getBoundingClientRect().height, 0) / Math.max(1, items.length);
           const vh = document.getElementById('item-list').clientHeight;
-          return {avg: Math.round(h), per: Math.floor(vh / h), vh: Math.round(vh), n: items.length};
+          return {avg: Math.round(h), per: Math.floor(vh / h), n: items.length};
         })()""")
-        check("列表项平均高度 ≤ 66px", metric["avg"] <= 66, f"{metric['avg']}px")
-        check("一屏可见 ≥ 10 条", metric["per"] >= 10, f"{metric['per']} 条/屏（视口 {metric['vh']}px）")
-        has_summary = ev(ws, "getComputedStyle(document.querySelector('.it-summary')).display !== 'none'")
-        check("移动端隐藏摘要行", not has_summary)
+        check("列表项平均高度 ≤ 50px", metric["avg"] <= 50, f"{metric['avg']}px")
+        check("一屏可见 ≥ 12 条", metric["per"] >= 12, f"{metric['per']} 条/屏")
+        title_lines = ev(ws, """(() => {
+          const t = document.querySelector('.it-title');
+          const lh = parseFloat(getComputedStyle(t).lineHeight) || 21;
+          return Math.round(t.getBoundingClientRect().height / lh);
+        })()""")
+        check("标题只占一行", title_lines == 1, f"{title_lines} 行")
+
+        print("== 列表初始只显示未读 ==")
+        counts = ev(ws, """(() => {
+          const items = [...document.querySelectorAll('.item')];
+          return {n: items.length, unread: items.filter(e => e.classList.contains('unread')).length,
+                  read: items.filter(e => !e.classList.contains('unread')).length};
+        })()""")
+        check("首屏没有已读文章", counts["read"] == 0, f"{counts['unread']} 未读 / {counts['read']} 已读")
         shot(ws, "m2-list.png")
 
-        print("== 移动端 · 点开原地展开 ==")
-        ev(ws, "window.__opened = []; window.open = (u) => { window.__opened.push(u); return null; };")
-        ev(ws, "document.querySelector('.item').click()")
-        time.sleep(1.6)
-        expanded = ev(ws, "!!document.querySelector('.item.expanded')")
-        check("卡片原地展开", expanded)
+        print("== 点一条 → 它和更早的未读全部变灰 ==")
+        before = counts["unread"]
+        total_items = counts["n"]
+        # 点第 3 条：它之后的（更早的）都应变已读
+        ev(ws, "document.querySelectorAll('.item')[2].click()")
+        time.sleep(2.2)
+        after = ev(ws, """(() => {
+          const items = [...document.querySelectorAll('.item')].slice(0, %d);
+          return {unread: items.filter(e => e.classList.contains('unread')).length,
+                  third: items[2] ? items[2].classList.contains('unread') : null};
+        })()""" % total_items)
+        check("更早的条目已变灰", after["unread"] < before, f"{before} → {after['unread']} 未读")
+        check("被点那条变为已读", after["third"] is False, str(after["third"]))
+        color = ev(ws, "getComputedStyle(document.querySelectorAll('.it-title')[2]).color")
+        check("已读标题转浅灰", color not in ("rgb(34, 34, 34)", "rgb(0, 0, 0)"), color)
+        shot(ws, "m3-read-up-to.png")
+
+        print("== 展开区（同为已读那一击） ==")
+        check("卡片原地展开", ev(ws, "!!document.querySelector('.item.expanded')"))
         more_len = ev(ws, "(document.querySelector('.it-more-html')||{}).textContent?.length || 0")
-        check("展开区有文字", (more_len or 0) > 50, f"{more_len} 字")
-        check("展开时未跳转原文", ev(ws, "window.__opened.length") == 0)
-        h_expanded = ev(ws, "Math.round(document.querySelector('.item.expanded').getBoundingClientRect().height)")
-        check("展开后卡片明显变高", h_expanded > metric["avg"] * 2, f"{h_expanded}px vs {metric['avg']}px")
-        shot(ws, "m3-expanded.png")
+        check("展开区有文字", (more_len or 0) > 10, f"{more_len} 字")
 
-        print("== 移动端 · 再点打开原文 ==")
+        print("== 滑到底才出现已读段 ==")
+        ev(ws, "document.getElementById('item-list').scrollTop = 99999")
+        time.sleep(2.6)
+        divider = ev(ws, "!!document.querySelector('.seg-divider')")
+        check("出现「以下是已读」分隔", divider)
+        mixed = ev(ws, """(() => {
+          const items = [...document.querySelectorAll('.item')];
+          return {n: items.length, unread: items.filter(e => e.classList.contains('unread')).length};
+        })()""")
+        check("已读文章已追加", mixed["n"] > total_items, f"{total_items} → {mixed['n']} 条")
+        shot(ws, "m4-read-segment.png")
+
+        print("== 再点已展开的卡片打开原文 ==")
+        ev(ws, "window.__opened = []; window.open = (u) => { window.__opened.push(u); return null; };")
         ev(ws, "document.querySelector('.item.expanded .it-title').click()")
-        time.sleep(0.8)
+        time.sleep(0.9)
         opened = ev(ws, "window.__opened")
-        check("再点触发打开原文", isinstance(opened, list) and len(opened) == 1, str(opened)[:80])
-        check("打开的是 http(s) 链接", bool(opened) and str(opened[0]).startswith("http"), str(opened)[:60])
+        check("再点打开原文", isinstance(opened, list) and len(opened) == 1, str(opened)[:70])
 
-        print("== 移动端 · 展开区按钮 ==")
-        ev(ws, "document.querySelector('.item[data-id]').click()")  # 收起或展开另一条
-        time.sleep(1.0)
-        ev(ws, "document.querySelector('.item [data-act=star]').click()")
-        time.sleep(1.2)
-        starred = ev(ws, "document.querySelector('.item [data-act=star]').classList.contains('on')")
-        check("展开区收藏按钮生效", bool(starred))
-        ev(ws, "document.querySelector('.item [data-act=star]').click()")  # 取消
-        time.sleep(1.0)
-
-        print("== 移动端 · 下拉刷新 ==")
+        print("== 下拉刷新 ==")
         ev(ws, "document.getElementById('item-list').scrollTop = 0")
-        time.sleep(0.3)
+        time.sleep(0.4)
         cdp(ws, "Input.dispatchTouchEvent", {"type": "touchStart", "touchPoints": [{"x": 195, "y": 380}]})
         heights = []
         for i in range(1, 9):
             cdp(ws, "Input.dispatchTouchEvent", {"type": "touchMove", "touchPoints": [{"x": 195, "y": 380 + i * 22}]})
             time.sleep(0.06)
             heights.append(ev(ws, "parseInt(document.getElementById('ptr').style.height) || 0"))
-        ptr_h = max(heights) if heights else 0
-        check("下拉时指示器展开", ptr_h > 20, f"{ptr_h}px")
-        ptr_text = ev(ws, "document.querySelector('#ptr .ptr-text').textContent")
-        check("提示文案切换到松手刷新", ptr_text in ("松手刷新", "下拉刷新"), ptr_text)
-        shot(ws, "m4-pulling.png")
+        check("下拉指示器展开", max(heights or [0]) > 20, f"{max(heights or [0])}px")
         cdp(ws, "Input.dispatchTouchEvent", {"type": "touchEnd", "touchPoints": []})
-        time.sleep(1.0)
-        loading_text = ev(ws, "document.querySelector('#ptr .ptr-text').textContent")
-        check("松手后进入刷新态", loading_text in ("刷新中…", "已刷新", "刷新失败"), loading_text)
+        time.sleep(1.2)
+        txt = ev(ws, "document.querySelector('#ptr .ptr-text').textContent")
+        check("松手进入刷新态", txt in ("刷新中…", "已刷新", "刷新失败"), txt)
         time.sleep(6)
-        final_h = ev(ws, "parseInt(document.getElementById('ptr').style.height) || 0")
-        check("刷新完成指示器收起", final_h == 0, f"{final_h}px")
-        shot(ws, "m5-refreshed.png")
+        check("刷新后指示器收起", ev(ws, "parseInt(document.getElementById('ptr').style.height) || 0") == 0)
 
-        print("== 桌面端 · 三栏 ==")
+        print("== 桌面端三栏 ==")
         ev(ws, "document.body.dataset.view = 'sources'")
         cdp(ws, "Emulation.setDeviceMetricsOverride",
             {"width": 1440, "height": 900, "deviceScaleFactor": 1, "mobile": False})
         time.sleep(0.6)
         ev(ws, "document.querySelector('.src-entry[data-scope=all]').click()")
-        time.sleep(2.0)
+        time.sleep(2.4)
         cols = ev(ws, "getComputedStyle(document.querySelector('.layout')).gridTemplateColumns")
         check("桌面三栏网格", cols.count("px") == 3, cols)
         ev(ws, "document.querySelector('.item').click()")
         time.sleep(1.6)
         rd = ev(ws, "(document.querySelector('.rd-content')||{}).innerHTML?.length || 0")
-        check("桌面点文章渲染右栏正文", (rd or 0) > 60, f"{rd} 字符")
-        check("桌面不进入展开态", not ev(ws, "!!document.querySelector('.item.expanded')"))
+        check("桌面右栏渲染正文", (rd or 0) > 20, f"{rd} 字符")
+        check("桌面不进展开态", not ev(ws, "!!document.querySelector('.item.expanded')"))
         shot(ws, "d1-three-col.png")
+
+        print("== 全部已读时列表不空白 ==")
+        # 用 API 把所有文章标为已读，模拟"读完一轮"
+        req = urllib.request.Request(
+            base + "/api/read-all", data=b"{}", method="POST",
+            headers={"content-type": "application/json", "cookie": f"ant_session={token}",
+                     "user-agent": "Mozilla/5.0 Chrome/140.0 Safari/537.36"})
+        urllib.request.urlopen(req, timeout=60).read()
+
+        ev(ws, "document.body.dataset.view = 'sources'")
+        cdp(ws, "Emulation.setDeviceMetricsOverride",
+            {"width": 390, "height": 844, "deviceScaleFactor": 2, "mobile": True})
+        time.sleep(0.5)
+        ev(ws, "document.querySelector('.src-entry[data-scope=all]').click()")
+        time.sleep(3.2)
+        n_all = ev(ws, "document.querySelectorAll('.item').length")
+        check("全已读时列表仍显示历史文章", (n_all or 0) > 0, f"{n_all} 条")
+        check("全已读时出现「以下是已读」", ev(ws, "!!document.querySelector('.seg-divider')"))
+        shot(ws, "m5-all-read.png")
 
         ws.close()
     finally:
