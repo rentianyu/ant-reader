@@ -436,7 +436,6 @@
           state.hasMore = state.filter === 'all' ? true : data.items.length < data.total;
         }
         renderItems();
-        maybeAutoLoad();
         return;
       }
 
@@ -459,6 +458,11 @@
           const p = buildParams({ offset: state.items.length });
           p.set('unread', '1');
           const data = await api(`/items?${p.toString()}`);
+          if (!data.items.length) {
+            // 未读已到底（total 可能偏大），校正后让下一轮进入已读段
+            state.unreadTotal = state.items.length;
+            return;
+          }
           state.items = state.items.concat(data.items);
           renderItems();
           return;
@@ -486,16 +490,22 @@
       el.itemContainer.innerHTML = `<div class="empty">${escapeHtml(err.message)}</div>`;
     } finally {
       state.loading = false;
+      maybeAutoLoad();
     }
   }
 
   /** 列表内容不足一屏时自动续载，否则用户滑不动、看不到后面的已读段 */
+  let autoLoadDepth = 0;
   function maybeAutoLoad() {
     if (state.loading || !state.hasMore) return;
+    if (autoLoadDepth > 10) return;
     const box = el.itemScroll;
-    if (box.scrollHeight <= box.clientHeight + 60) {
-      loadItems(true).then(() => maybeAutoLoad());
-    }
+    if (box.scrollHeight > box.clientHeight + 60) return;
+    autoLoadDepth++;
+    loadItems(true).finally(() => {
+      autoLoadDepth = Math.max(0, autoLoadDepth - 1);
+      maybeAutoLoad();
+    });
   }
 
   /* 滑到底部自动加载下一段 */
