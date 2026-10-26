@@ -21,7 +21,7 @@
   ],
   "routes": [
     {
-      "pattern": "rss.xbta.cc/*",
+      "pattern": "ant.xbta.cc/*",
       "zone_name": "xbta.cc"
     }
   ],
