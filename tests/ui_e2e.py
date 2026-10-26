@@ -201,6 +201,32 @@ def main():
         more_len = ev(ws, "(document.querySelector('.it-more-html')||{}).textContent?.length || 0")
         check("展开区有文字", (more_len or 0) > 10, f"{more_len} 字")
 
+        print("== 展开后下方仍露出下一条 + 滚动联动 ==")
+        # 点倒数第二条（它下面还有一条），检验布局与滚动链
+        ev(ws, "(() => { const a = [...document.querySelectorAll('.item')]; a[a.length - 2].click(); })()")
+        time.sleep(2.6)
+        geo = ev(ws, """(() => {
+          const card = document.querySelector('.item.expanded');
+          const box = document.getElementById('item-list');
+          if (!card) return null;
+          const cr = card.getBoundingClientRect();
+          const br = box.getBoundingClientRect();
+          const next = card.nextElementSibling;
+          const holder = card.querySelector('.it-more-html, .it-more-text');
+          return {
+            spaceBelow: Math.round(br.bottom - cr.bottom),
+            hasNext: !!next,
+            nextTop: next ? Math.round(next.getBoundingClientRect().top - br.top) : null,
+            nextVisible: next ? next.getBoundingClientRect().top < br.bottom - 8 : null,
+            holderMaxH: holder ? holder.style.maxHeight : null,
+            overscroll: holder ? getComputedStyle(holder).overscrollBehaviorY : null,
+          };
+        })()""")
+        check("展开卡片下方留有空间", geo and geo["spaceBelow"] >= 40, str(geo and geo["spaceBelow"]))
+        check("下一条文章可见", geo and geo["nextVisible"] is True, str(geo and geo["nextTop"]))
+        check("展开区允许滚动联动外层", geo and geo["overscroll"] in ("auto", "visible"), str(geo and geo["overscroll"]))
+        shot(ws, "m5-expand-next.png")
+
         shot(ws, "m4-list-full.png")
 
         print("== 再点已展开的卡片打开原文 ==")
@@ -211,8 +237,11 @@ def main():
         check("再点打开原文", isinstance(opened, list) and len(opened) == 1, str(opened)[:70])
 
         print("== 下拉刷新 ==")
+        # 先收起展开、重置列表，避免内部滚动容器拦截手势
+        ev(ws, "document.querySelector('.seg-item[data-filter=all]').click()")
+        time.sleep(2.6)
         ev(ws, "document.getElementById('item-list').scrollTop = 0")
-        time.sleep(0.4)
+        time.sleep(0.5)
         cdp(ws, "Input.dispatchTouchEvent", {"type": "touchStart", "touchPoints": [{"x": 195, "y": 380}]})
         heights = []
         for i in range(1, 9):

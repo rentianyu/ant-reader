@@ -504,10 +504,44 @@
 
   /* ------------------------- 移动端原地展开 ------------------------- */
 
+  /**
+   * 展开后限制正文高度：保证卡片下方至少露出下一条（约 58px）。
+   * 卡片本身太靠下时，先把它滚到视口顶部，腾出空间。
+   */
+  function fitExpandedCard(id) {
+    const card = document.querySelector(`.item.expanded[data-id="${id}"]`);
+    if (!card) return;
+    const holder = card.querySelector('.it-more-html, .it-more-text');
+    if (!holder) return;
+
+    const box = el.itemScroll;
+    const listRect = box.getBoundingClientRect();
+    const cardRect = card.getBoundingClientRect();
+
+    // 剩余空间不足（卡片太靠下）：先滚到顶部再算
+    if (listRect.bottom - cardRect.top < 420) {
+      const delta = cardRect.top - listRect.top;
+      if (Math.abs(delta) > 4) {
+        box.scrollTo({ top: Math.max(0, box.scrollTop + delta - 6), behavior: 'smooth' });
+      }
+      setTimeout(() => fitExpandedCard(id), 340);
+      return;
+    }
+
+    holder.style.maxHeight = '';
+    const holderH = holder.getBoundingClientRect().height;
+    const chromeH = Math.max(0, cardRect.height - holderH); // 标题 + 元信息 + 底部按钮 + padding
+    const hasNext = !!card.nextElementSibling;
+    const reserve = hasNext ? 58 : 14;
+    const avail = listRect.bottom - cardRect.top - chromeH - reserve;
+    holder.style.maxHeight = Math.max(120, Math.round(avail)) + 'px';
+  }
+
   async function expandItem(id) {
     state.expandedId = id;
     renderItems();
     markReadUpTo(id);
+    setTimeout(() => fitExpandedCard(id), 40);
     if (state.itemCache.has(id)) return;
     try {
       const data = await api(`/items/${id}`);
@@ -515,6 +549,7 @@
       const holder = document.querySelector(`[data-more-body="${id}"]`);
       if (holder && state.expandedId === id) {
         holder.innerHTML = expandedBody(data.item);
+        fitExpandedCard(id);
       }
     } catch (err) {
       const holder = document.querySelector(`[data-more-body="${id}"]`);
@@ -816,6 +851,14 @@
 
   setupPullToRefresh(el.itemScroll, el.ptr, () => doRefresh());
   setupPullToRefresh(el.srcScroll, el.ptrSrc, () => doRefresh());
+
+  /* 横竖屏切换 / 窗口尺寸变化时重算展开区高度 */
+  let fitTimer = null;
+  window.addEventListener('resize', () => {
+    if (!state.expandedId) return;
+    clearTimeout(fitTimer);
+    fitTimer = setTimeout(() => fitExpandedCard(state.expandedId), 200);
+  });
 
   /* ------------------------------ 菜单 ------------------------------ */
   $('#btn-menu').addEventListener('click', (e) => {

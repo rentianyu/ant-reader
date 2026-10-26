@@ -405,8 +405,8 @@ select.input { appearance: none; background-image: linear-gradient(45deg, transp
   word-break: break-word;
   max-height: 46vh;
   overflow-y: auto;
-  overscroll-behavior: contain;
-  -webkit-overflow-scrolling: touch;
+  /* 滚到底后允许继续滚外层列表（不要 contain，否则滚不动） */
+  overscroll-behavior: auto;
 }
 .it-more-text { white-space: pre-wrap; }
 .it-more-html p { margin: 0 0 0.75em; }
