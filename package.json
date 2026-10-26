@@ -1,6 +1,6 @@
 {
   "name": "ant-reader",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "private": true,
   "description": "蚁阅风格 RSS 阅读器 · Cloudflare Workers + D1，零运行时依赖",
   "type": "module",

@@ -133,7 +133,7 @@ export async function listItems(db, opts = {}) {
            i.is_read, i.is_starred, f.title AS feed_title, f.site_url AS feed_site_url
     FROM items i JOIN feeds f ON f.id = i.feed_id
     ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
-    ORDER BY COALESCE(i.published_at, i.fetched_at) DESC, i.id DESC
+    ORDER BY COALESCE(i.published_at, i.fetched_at) ASC, i.id ASC
     LIMIT ? OFFSET ?
   `;
   const countSql = `

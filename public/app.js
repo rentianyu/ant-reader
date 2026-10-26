@@ -585,12 +585,12 @@
     }
   }
 
-  /** 点击某篇：它以及比它更早的未读全部标为已读（当前列表范围内），立即变灰 */
+  /** 点击某篇：它以及比它更早的未读全部标为已读（列表按旧→新排列，更早的在上方） */
   async function markReadUpTo(id) {
     const idx = state.items.findIndex((x) => x.id === id);
     if (idx < 0) return;
     let localChanged = 0;
-    for (let i = idx; i < state.items.length; i++) {
+    for (let i = 0; i <= idx; i++) {
       if (!state.items[i].is_read) {
         state.items[i].is_read = 1;
         localChanged++;

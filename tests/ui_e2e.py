@@ -131,6 +131,15 @@ def main():
         check("订阅源条目 ≤ 50px", src_h and src_h <= 50, f"{src_h}px")
 
         print("== 文章列表：密度 ==")
+        # 接口层先确认排序：旧 → 新
+        req0 = urllib.request.Request(
+            base + "/api/items?limit=6&unread=1",
+            headers={"cookie": f"ant_session={token}",
+                     "user-agent": "Mozilla/5.0 Chrome/140.0 Safari/537.36"})
+        d0 = json.loads(urllib.request.urlopen(req0, timeout=60).read())
+        ts0 = [i["published_at"] or i["fetched_at"] for i in d0["items"]]
+        check("接口按时间升序（旧→新）", ts0 == sorted(ts0), f"{len(ts0)} 条")
+
         ev(ws, "document.querySelector('.src-entry[data-scope=all]').click()")
         time.sleep(2.4)
         check("进入文章列表", ev(ws, "document.body.dataset.view") == "list")
@@ -161,16 +170,19 @@ def main():
         print("== 点一条 → 它和更早的未读全部变灰 ==")
         before = counts["unread"]
         total_items = counts["n"]
-        # 点第 3 条：它之后的（更早的）都应变已读
+        # 升序下点第 3 条：它和它上面两条（更早的）变已读，下面的（更新的）保持未读
         ev(ws, "document.querySelectorAll('.item')[2].click()")
         time.sleep(2.2)
         after = ev(ws, """(() => {
           const items = [...document.querySelectorAll('.item')].slice(0, %d);
           return {unread: items.filter(e => e.classList.contains('unread')).length,
-                  third: items[2] ? items[2].classList.contains('unread') : null};
+                  first: items[0] ? items[0].classList.contains('unread') : null,
+                  third: items[2] ? items[2].classList.contains('unread') : null,
+                  fourth: items[3] ? items[3].classList.contains('unread') : null};
         })()""" % total_items)
-        check("更早的条目已变灰", after["unread"] < before, f"{before} → {after['unread']} 未读")
+        check("更早的（上方）已变灰", after["unread"] == before - 3, f"{before} → {after['unread']} 未读")
         check("被点那条变为已读", after["third"] is False, str(after["third"]))
+        check("更新的（下方）仍未读", after["fourth"] is True, str(after["fourth"]))
         color = ev(ws, "getComputedStyle(document.querySelectorAll('.it-title')[2]).color")
         check("已读标题转浅灰", color not in ("rgb(34, 34, 34)", "rgb(0, 0, 0)"), color)
         shot(ws, "m3-read-up-to.png")
