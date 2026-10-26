@@ -360,6 +360,111 @@ select.input { appearance: none; background-image: linear-gradient(45deg, transp
 .it-star { color: #f0b400; display: inline-flex; }
 .it-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); flex: none; }
 
+/* 右侧竖排元信息（移动端紧凑模式用） */
+.it-side { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 1px; min-width: 44px; }
+.it-feed-mini {
+  display: none;
+  font-size: 10.5px;
+  line-height: 1.2;
+  color: var(--text-4);
+  max-width: 68px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 原地展开区 */
+.it-more { display: none; }
+.item.expanded { background: var(--bg-active); }
+.item.expanded .it-more { display: block; margin-top: 9px; }
+.it-more-text, .it-more-html {
+  font-size: 13.5px;
+  line-height: 1.68;
+  color: var(--text-2);
+  word-break: break-word;
+  max-height: 46vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+.it-more-text { white-space: pre-wrap; }
+.it-more-html p { margin: 0 0 0.75em; }
+.it-more-html p:last-child { margin-bottom: 0; }
+.it-more-html img { max-width: 100%; height: auto; border-radius: 4px; margin: 6px 0; display: block; }
+.it-more-html h1, .it-more-html h2, .it-more-html h3, .it-more-html h4 {
+  font-size: 1.06em;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0.9em 0 0.45em;
+  line-height: 1.45;
+}
+.it-more-html a { color: var(--accent); text-decoration: none; }
+.it-more-html ul, .it-more-html ol { padding-left: 1.3em; margin: 0.5em 0 0.75em; }
+.it-more-html li { margin: 0.2em 0; }
+.it-more-html blockquote {
+  margin: 0.7em 0; padding-left: 10px;
+  border-left: 2px solid var(--line-strong); color: var(--text-3);
+}
+.it-more-html pre {
+  background: var(--bg-soft); border: 1px solid var(--line); border-radius: 6px;
+  padding: 8px 10px; overflow-x: auto; font-size: 12.5px; line-height: 1.55;
+}
+.it-more-html code { font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 0.92em; background: var(--bg-soft); padding: 1px 4px; border-radius: 3px; }
+.it-more-html pre code { background: none; padding: 0; }
+.it-more-html table { width: 100%; border-collapse: collapse; font-size: 12.5px; display: block; overflow-x: auto; }
+.it-more-html th, .it-more-html td { border: 1px solid var(--line-strong); padding: 5px 7px; }
+.it-more-html hr { border: 0; border-top: 1px solid var(--line); margin: 1em 0; }
+.it-more-html figcaption { font-size: 11.5px; color: var(--text-4); text-align: center; margin-top: 4px; }
+.it-more-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+  padding-top: 9px;
+  border-top: 1px dashed var(--line-strong);
+}
+.it-more-hint {
+  flex: 1;
+  font-size: 11.5px;
+  color: var(--text-4);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.it-act {
+  flex: none;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 13px;
+  font-size: 12px;
+  color: var(--text-3);
+  background: var(--bg-hover);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.it-act:hover { background: var(--line); color: var(--text); }
+.it-act.on { background: var(--accent-soft); color: var(--accent); }
+
+/* 下拉刷新指示器 */
+.ptr {
+  height: 0;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-3);
+  transition: height 0.2s ease;
+}
+.ptr.animating { transition: height 0.16s ease; }
+.ptr-icon { display: inline-flex; transition: transform 0.2s ease; font-size: 13px; }
+.ptr.ready .ptr-icon { transform: rotate(180deg); }
+.ptr.loading .ptr-icon { animation: spin 0.9s linear infinite; }
+
+
 .list-more { flex: none; padding: 12px 16px 20px; }
 
 .empty {
@@ -554,6 +659,8 @@ select.input { appearance: none; background-image: linear-gradient(45deg, transp
 
 /* ============================== 移动端 ============================== */
 @media (max-width: 899px) {
+  :root { --topbar-h: 50px; }
+
   .pane { display: none; height: 100%; }
   body[data-view="sources"] #pane-sources,
   body[data-view="list"] #pane-list,
@@ -565,8 +672,42 @@ select.input { appearance: none; background-image: linear-gradient(45deg, transp
   #pane-reader .reader-head { justify-content: flex-start; gap: 4px; }
   .reader-head-right { margin-left: auto; }
 
-  .brand { font-size: 19px; }
-  .src-entry { height: 56px; }
+  /* --- 工具条压紧 --- */
+  .brand { font-size: 18.5px; letter-spacing: 0.5px; }
+  .topbar { padding-left: 14px; padding-right: 6px; }
+  .topbar-actions { gap: 0; }
+  .icon-btn { width: 36px; height: 36px; }
+  .icon-btn.sm { width: 32px; height: 32px; }
+  .list-head { height: 44px; padding: 0 6px 0 2px; }
+  .list-title { font-size: 14.5px; padding-left: 4px; }
+  .segbar { padding: 5px 10px; gap: 5px; }
+  .seg-item { height: 25px; padding: 0 10px; font-size: 12.5px; }
+
+  /* --- 订阅源列表 --- */
+  .src-scroll { padding: 2px 0 20px; }
+  .src-entry { height: 48px; gap: 8px; padding: 0 14px; }
+  .se-name { font-size: 15px; }
+  .se-icon { width: 18px; }
+  .se-badge { min-width: 19px; height: 18px; line-height: 18px; font-size: 11px; padding: 0 5px; }
+  .se-time { font-size: 11.5px; min-width: 40px; }
+  .src-group { padding: 12px 14px 4px; font-size: 12px; }
+  .src-empty { padding: 40px 20px; font-size: 13.5px; }
+
+  /* --- 文章列表：只有标题 + 右侧时间 --- */
+  .item { padding: 9px 14px; }
+  .it-summary, .it-meta { display: none; }
+  .it-top { gap: 8px; align-items: flex-start; }
+  .it-title { font-size: 14.8px; line-height: 1.36; -webkit-line-clamp: 2; }
+  .it-time { font-size: 11px; line-height: 1.45; color: var(--text-4); }
+  .it-feed-mini.show { display: block; }
+  .item.expanded { padding: 11px 14px 12px; }
+  .item.expanded .it-title { -webkit-line-clamp: unset; }
+  .it-more-text { font-size: 13px; line-height: 1.72; }
+  .it-more-hint { font-size: 11px; }
+  .it-act { height: 24px; padding: 0 9px; font-size: 11.5px; }
+  .list-more { padding: 8px 14px 16px; }
+  .empty { padding: 44px 20px; font-size: 13.5px; }
+
   .reader-body { padding: 18px 16px 80px; }
   .rd-title { font-size: 20px; }
   .rd-content { font-size: 16.5px; }

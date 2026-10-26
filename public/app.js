@@ -17,6 +17,8 @@
     current: null,
     collapsed: new Set(),
     loading: false,
+    expandedId: null,
+    itemCache: new Map(),
   };
 
   const $ = (sel) => document.querySelector(sel);
@@ -29,8 +31,12 @@
     authSubmit: $('#auth-submit'),
     authErr: $('#auth-err'),
     main: $('#main-view'),
-    srcList: $('#src-list'),
-    itemList: $('#item-list'),
+    srcScroll: $('#src-list'),
+    srcContainer: $('#src-container'),
+    ptrSrc: $('#ptr-src'),
+    itemScroll: $('#item-list'),
+    itemContainer: $('#item-container'),
+    ptr: $('#ptr'),
     listTitle: $('#list-title'),
     listMore: $('#list-more'),
     readerBody: $('#reader-body'),
@@ -64,6 +70,51 @@
     .replace(/\s*(?:查看全文|阅读全文|阅读原文|查看原文|点击查看)\.?\s*$/i, '')
     .replace(/\s+/g, ' ')
     .trim();
+
+  const STAR_SVG = `<svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><path d="M12 3.6l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8L3.5 9.8l5.9-.9z"/></svg>`;
+
+  /** HTML → 纯文本（保留段落换行），用于列表内展开预览 */
+  const htmlToPlain = (html) => String(html || '')
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<\/(p|div|li|h[1-6]|tr|blockquote|pre)>/gi, '\n')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+
+  const EXPAND_HTML_LIMIT = 15000;
+
+  /** 展开区内容：优先渲染 HTML（保留图片与段落），过长时按段落截断 */
+  function expandedBody(item) {
+    const html = String(item.content || '').trim();
+    if (html) return `<div class="it-more-html">${clampHtml(tidyHtml(html))}</div>`;
+    const text = cleanText(item.summary || '');
+    if (text) return `<div class="it-more-html">${escapeHtml(text)}</div>`;
+    return `<div class="it-more-html" style="color:var(--text-3)">这篇没有正文，点「原文」去看完整内容。</div>`;
+  }
+
+  /** 去掉源站模板残留：段首的「>」引用符号、「[查看全文]」之类 */
+  function tidyHtml(html) {
+    return String(html)
+      .replace(/(<p[^>]*>|<br\s*\/?>|^)(?:\s*(?:&gt;|>)\s*)+/gi, '$1')
+      .replace(/[\[【(（]\s*(?:查看全文|阅读原文|阅读全文|查看原文)\s*[\]】)）]/gi, '');
+  }
+
+  function clampHtml(html) {
+    if (html.length <= EXPAND_HTML_LIMIT) return html;
+    const cut = html.slice(0, EXPAND_HTML_LIMIT);
+    const lastP = cut.lastIndexOf('</p>');
+    const base = lastP > EXPAND_HTML_LIMIT * 0.5 ? cut.slice(0, lastP + 4) : cut;
+    return `${base}<p style="color:var(--text-4);font-size:12px">…… 内容较长，点「原文」看完整版</p>`;
+  }
 
   function fmtTime(ts) {
     if (!ts) return '';
@@ -233,7 +284,7 @@
       parts.push(`<div class="src-empty"><span class="big">还没有订阅</span>点右上角 ＋ 添加第一个 RSS 源</div>`);
     }
 
-    el.srcList.innerHTML = parts.join('');
+    el.srcContainer.innerHTML = parts.join('');
   }
 
   function srcEntryHtml({ key, icon, name, badge, active, time }) {
@@ -255,7 +306,7 @@
     </div>`;
   }
 
-  el.srcList.addEventListener('click', (e) => {
+  el.srcScroll.addEventListener('click', (e) => {
     const groupHead = e.target.closest('.src-group');
     if (groupHead && groupHead.dataset.group) {
       const id = parseInt(groupHead.dataset.group, 10);
@@ -347,9 +398,10 @@
       const data = await api(`/items?${params.toString()}`);
       state.items = more ? state.items.concat(data.items) : data.items;
       state.total = data.total;
+      if (!more) state.expandedId = null;
       renderItems();
     } catch (err) {
-      el.itemList.innerHTML = `<div class="empty">${escapeHtml(err.message)}</div>`;
+      el.itemContainer.innerHTML = `<div class="empty">${escapeHtml(err.message)}</div>`;
     } finally {
       state.loading = false;
     }
@@ -357,62 +409,156 @@
 
   function renderItems() {
     if (!state.items.length) {
-      el.itemList.innerHTML = `<div class="empty"><span class="big">这里没有文章</span>${state.filter === 'unread' ? '所有文章都读完了' : '换个筛选条件或刷新试试'}</div>`;
+      el.itemContainer.innerHTML = `<div class="empty"><span class="big">这里没有文章</span>${state.filter === 'unread' ? '所有文章都读完了' : '换个筛选条件或刷新试试'}</div>`;
       el.listMore.hidden = true;
       return;
     }
 
-    el.itemList.innerHTML = state.items.map((it) => {
+    const showFeedMini = state.scope.type !== 'feed';
+
+    el.itemContainer.innerHTML = state.items.map((it) => {
       const active = state.current && state.current.id === it.id;
-      return `<button class="item ${it.is_read ? '' : 'unread'} ${active ? 'active' : ''}" data-id="${it.id}">
+      const expanded = state.expandedId === it.id;
+      return `<div class="item ${it.is_read ? '' : 'unread'} ${active ? 'active' : ''} ${expanded ? 'expanded' : ''}" data-id="${it.id}" role="button" tabindex="0">
         <div class="it-top">
           <div class="it-title">${escapeHtml(it.title || '(无标题)')}</div>
-          <div class="it-time">${fmtTime(it.published_at || it.fetched_at)}</div>
+          <div class="it-side">
+            <span class="it-time">${fmtTime(it.published_at || it.fetched_at)}</span>
+            <span class="it-feed-mini ${showFeedMini ? 'show' : ''}">${escapeHtml(it.feed_title || '')}</span>
+          </div>
         </div>
         <div class="it-meta">
           <span class="it-feed">${escapeHtml(it.feed_title || '')}</span>
           ${it.author ? `<span class="sep">·</span><span>${escapeHtml(it.author)}</span>` : ''}
-          ${it.is_starred ? `<span class="it-star"><svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><path d="M12 3.6l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8L3.5 9.8l5.9-.9z"/></svg></span>` : ''}
+          ${it.is_starred ? `<span class="it-star">${STAR_SVG}</span>` : ''}
         </div>
         ${it.summary ? `<div class="it-summary">${escapeHtml(cleanText(it.summary))}</div>` : ''}
-      </button>`;
+        ${expanded ? renderExpanded(it) : ''}
+      </div>`;
     }).join('');
 
     el.listMore.hidden = state.items.length >= state.total;
   }
 
-  el.itemList.addEventListener('click', (e) => {
-    const btn = e.target.closest('.item');
-    if (!btn) return;
-    openItem(parseInt(btn.dataset.id, 10));
+  function renderExpanded(it) {
+    const cached = state.itemCache.get(it.id);
+    const body = cached
+      ? expandedBody(cached)
+      : `<div class="it-more-text" style="color:var(--text-3)">加载中…</div>`;
+    return `<div class="it-more">
+      <div data-more-body="${it.id}">${body}</div>
+      <div class="it-more-foot">
+        <span class="it-more-hint">点卡片打开原文</span>
+        <button class="it-act ${it.is_starred ? 'on' : ''}" data-act="star" data-id="${it.id}">${it.is_starred ? '已收藏' : '收藏'}</button>
+        <button class="it-act" data-act="open" data-id="${it.id}">原文 ↗</button>
+      </div>
+    </div>`;
+  }
+
+  /* ------------------------- 移动端原地展开 ------------------------- */
+
+  async function expandItem(id) {
+    state.expandedId = id;
+    renderItems();
+    markItemRead(id);
+    if (state.itemCache.has(id)) return;
+    try {
+      const data = await api(`/items/${id}`);
+      state.itemCache.set(id, data.item);
+      const holder = document.querySelector(`[data-more-body="${id}"]`);
+      if (holder && state.expandedId === id) {
+        holder.innerHTML = expandedBody(data.item);
+      }
+    } catch (err) {
+      const holder = document.querySelector(`[data-more-body="${id}"]`);
+      if (holder) holder.innerHTML = `<div class="it-more-text" style="color:var(--danger)">${escapeHtml(err.message)}</div>`;
+    }
+  }
+
+  function markItemRead(id) {
+    const row = state.items.find((x) => x.id === id);
+    if (!row || row.is_read) return;
+    row.is_read = 1;
+    state.counts.unread = Math.max(0, (state.counts.unread || 0) - 1);
+    const feed = state.feeds.find((f) => f.id === row.feed_id);
+    if (feed && feed.unread > 0) feed.unread -= 1;
+    renderSources();
+    const card = document.querySelector(`.item[data-id="${id}"]`);
+    if (card) card.classList.remove('unread');
+    api(`/items/${id}`, { method: 'PATCH', body: { read: true } }).catch(() => {});
+  }
+
+  function openOriginal(id) {
+    const row = state.items.find((x) => x.id === id);
+    const cached = state.itemCache.get(id);
+    const link = (cached && cached.link) || (row && row.link) || '';
+    if (!link) { toast('这篇没有原文链接'); return; }
+    window.open(link, '_blank', 'noopener');
+  }
+
+  async function toggleStarItem(id) {
+    const row = state.items.find((x) => x.id === id);
+    if (!row) return;
+    const next = row.is_starred ? 0 : 1;
+    row.is_starred = next;
+    state.counts.starred = Math.max(0, (state.counts.starred || 0) + (next ? 1 : -1));
+    const cached = state.itemCache.get(id);
+    if (cached) cached.is_starred = next;
+    renderItems();
+    renderSources();
+    try {
+      await api(`/items/${id}`, { method: 'PATCH', body: { starred: !!next } });
+      toast(next ? '已收藏' : '已取消收藏', 1200);
+    } catch (err) { toast(err.message); }
+  }
+
+  el.itemContainer.addEventListener('click', (e) => {
+    const act = e.target.closest('[data-act]');
+    if (act) {
+      e.stopPropagation();
+      const actId = parseInt(act.dataset.id, 10);
+      if (act.dataset.act === 'star') toggleStarItem(actId);
+      else if (act.dataset.act === 'open') openOriginal(actId);
+      return;
+    }
+    const card = e.target.closest('.item');
+    if (!card) return;
+    const id = parseInt(card.dataset.id, 10);
+    if (isMobile()) {
+      // 移动端：第一次在原地点开看更多文字，再点一次跳原文
+      if (state.expandedId === id) openOriginal(id);
+      else expandItem(id);
+    } else {
+      openItem(id);
+    }
+  });
+
+  el.itemContainer.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    const card = e.target.closest('.item');
+    if (!card) return;
+    e.preventDefault();
+    card.click();
   });
 
   $('#btn-more').addEventListener('click', () => loadItems(true));
 
   /* ------------------------------ 打开文章 ------------------------------ */
+  /** 桌面端：点击文章在右栏渲染正文 */
   async function openItem(id) {
-    const idx = state.items.findIndex((x) => x.id === id);
-    if (idx < 0) return;
-
     try {
-      const data = await api(`/items/${id}`);
-      const item = data.item;
+      let item = state.itemCache.get(id);
+      if (!item) {
+        const data = await api(`/items/${id}`);
+        item = data.item;
+        state.itemCache.set(id, item);
+      }
       state.current = item;
       renderReader(item);
-
-      if (!item.is_read) {
-        item.is_read = 1;
-        const listItem = state.items[idx];
-        listItem.is_read = 1;
-        state.counts.unread = Math.max(0, (state.counts.unread || 1) - 1);
-        const feed = state.feeds.find((f) => f.id === item.feed_id);
-        if (feed && feed.unread > 0) feed.unread -= 1;
-        renderSources();
-        renderItems();
-        api(`/items/${id}`, { method: 'PATCH', body: { read: true } }).catch(() => {});
-      }
-
-      if (isMobile()) setView('reader');
+      markItemRead(id);
+      const row = state.items.find((x) => x.id === id);
+      if (row) row.is_read = 1;
+      renderItems();
       el.readerScroll.scrollTop = 0;
     } catch (err) {
       toast(err.message);
@@ -503,27 +649,111 @@
     } catch (err) { toast(err.message); }
   });
 
+  /** 刷新当前范围（单源 / 全部），按钮与下拉刷新共用 */
+  async function doRefresh() {
+    let msg;
+    if (state.scope.type === 'feed') {
+      const r = await api(`/feeds/${state.scope.id}/refresh`, { method: 'POST' });
+      msg = r.added ? `更新 ${r.added} 篇` : '没有新文章';
+    } else {
+      const r = await api('/refresh', { method: 'POST', body: { limit: 15 } });
+      msg = `刷新 ${r.refreshed} 个源，新增 ${r.added} 篇${r.errors.length ? `，${r.errors.length} 个失败` : ''}`;
+    }
+    await refreshCounts();
+    await loadItems();
+    return msg;
+  }
+
   $('#btn-refresh').addEventListener('click', async (e) => {
     const btn = e.currentTarget;
     btn.classList.add('busy');
     try {
-      let msg;
-      if (state.scope.type === 'feed') {
-        const r = await api(`/feeds/${state.scope.id}/refresh`, { method: 'POST' });
-        msg = r.added ? `更新 ${r.added} 篇` : '没有新文章';
-      } else {
-        const r = await api('/refresh', { method: 'POST', body: { limit: 15 } });
-        msg = `刷新 ${r.refreshed} 个源，新增 ${r.added} 篇${r.errors.length ? `，${r.errors.length} 个失败` : ''}`;
-      }
-      await refreshCounts();
-      await loadItems();
-      toast(msg, 2600);
+      toast(await doRefresh(), 2600);
     } catch (err) {
       toast(err.message, 3400);
     } finally {
       btn.classList.remove('busy');
     }
   });
+
+  /* ---------------------------- 下拉刷新 ---------------------------- */
+
+  function setupPullToRefresh(scroller, ptrEl, onRefresh) {
+    if (!scroller || !ptrEl) return;
+    const THRESHOLD = 54;
+    const MAXH = 76;
+    const iconEl = ptrEl.querySelector('.ptr-icon');
+    const textEl = ptrEl.querySelector('.ptr-text');
+    let startY = 0;
+    let pulling = false;
+    let dist = 0;
+    let busy = false;
+
+    const setHeight = (h, animate) => {
+      ptrEl.classList.toggle('animating', !!animate);
+      ptrEl.style.height = h + 'px';
+    };
+    const reset = (animate = true) => {
+      dist = 0;
+      ptrEl.classList.remove('ready', 'loading');
+      if (iconEl) iconEl.textContent = '↓';
+      if (textEl) textEl.textContent = '下拉刷新';
+      setHeight(0, animate);
+    };
+
+    scroller.addEventListener('touchstart', (e) => {
+      if (busy || scroller.scrollTop > 2) return;
+      startY = e.touches[0].clientY;
+      pulling = true;
+      dist = 0;
+    }, { passive: true });
+
+    scroller.addEventListener('touchmove', (e) => {
+      if (!pulling || busy) return;
+      const dy = e.touches[0].clientY - startY;
+      if (dy <= 0) {
+        if (dist > 0) reset(false);
+        return;
+      }
+      if (scroller.scrollTop > 2) { pulling = false; reset(false); return; }
+      dist = Math.min(dy * 0.62, MAXH);
+      if (dist > 6) e.preventDefault();
+      setHeight(dist, false);
+      const ready = dist >= THRESHOLD;
+      ptrEl.classList.toggle('ready', ready);
+      if (iconEl) iconEl.textContent = ready ? '↑' : '↓';
+      if (textEl) textEl.textContent = ready ? '松手刷新' : '下拉刷新';
+    }, { passive: false });
+
+    const finish = async () => {
+      if (!pulling) return;
+      pulling = false;
+      if (dist < THRESHOLD) { reset(true); return; }
+      busy = true;
+      dist = 0;
+      ptrEl.classList.add('loading');
+      if (iconEl) iconEl.textContent = '↻';
+      if (textEl) textEl.textContent = '刷新中…';
+      setHeight(38, true);
+      try {
+        await onRefresh();
+        if (textEl) textEl.textContent = '已刷新';
+        await new Promise((r) => setTimeout(r, 400));
+      } catch {
+        if (textEl) textEl.textContent = '刷新失败';
+        await new Promise((r) => setTimeout(r, 600));
+      } finally {
+        busy = false;
+        reset(true);
+      }
+    };
+
+    scroller.addEventListener('touchend', finish);
+    scroller.addEventListener('touchcancel', () => { pulling = false; reset(true); });
+  }
+
+  setupPullToRefresh(el.itemScroll, el.ptr, () => doRefresh());
+  setupPullToRefresh(el.srcScroll, el.ptrSrc, () => doRefresh());
 
   /* ------------------------------ 菜单 ------------------------------ */
   $('#btn-menu').addEventListener('click', (e) => {

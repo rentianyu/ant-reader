@@ -56,7 +56,10 @@
     <main class="layout">
       <!-- -------- 订阅源 -------- -->
       <aside class="pane pane-sources" id="pane-sources">
-        <div class="src-scroll" id="src-list"></div>
+        <div class="src-scroll" id="src-list">
+          <div class="ptr" id="ptr-src"><span class="ptr-icon">↓</span><span class="ptr-text">下拉刷新</span></div>
+          <div id="src-container"></div>
+        </div>
       </aside>
 
       <!-- -------- 文章列表 -------- -->
@@ -75,7 +78,10 @@
           <button class="seg-item" data-filter="unread">未读</button>
           <button class="seg-item" data-filter="starred">收藏</button>
         </div>
-        <div class="item-scroll" id="item-list"></div>
+        <div class="item-scroll" id="item-list">
+          <div class="ptr" id="ptr"><span class="ptr-icon">↓</span><span class="ptr-text">下拉刷新</span></div>
+          <div id="item-container"></div>
+        </div>
         <div class="list-more" id="list-more" hidden>
           <button class="btn ghost block" id="btn-more">加载更多</button>
         </div>

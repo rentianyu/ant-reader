@@ -47,11 +47,11 @@ async function fetchOnce(url) {
   });
 }
 
-/** 去掉正文开头的「>」类噪声符号（部分站点的摘要模板残留） */
+/** 去掉正文里的源站模板残留：「>」引用符号、「[查看全文]」之类 */
 function trimLeadingQuote(html) {
   return String(html || '')
-    .replace(/^(\s*<p[^>]*>)(?:\s*(?:&gt;|>)\s*)+/i, '$1')
-    .replace(/^(\s*)(?:(?:&gt;|>)\s*)+/i, '$1');
+    .replace(/(<p[^>]*>|<br\s*\/?>|^)(?:\s*(?:&gt;|>)\s*)+/gi, '$1')
+    .replace(/[\[【(（]\s*(?:查看全文|阅读原文|阅读全文|查看原文)\s*[\]】)）]/gi, '');
 }
 
 /**
