@@ -1,0 +1,17 @@
+{
+  "name": "ant-reader",
+  "version": "1.0.0",
+  "private": true,
+  "description": "蚁阅风格 RSS 阅读器 · Cloudflare Workers + D1，零运行时依赖",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:init": "wrangler d1 execute ant-reader-db --remote --file=./schema.sql",
+    "db:init:local": "wrangler d1 execute ant-reader-db --local --file=./schema.sql",
+    "test": "node tests/run.mjs"
+  },
+  "devDependencies": {
+    "wrangler": "4.86.0"
+  }
+}
