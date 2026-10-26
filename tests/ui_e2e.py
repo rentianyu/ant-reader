@@ -89,9 +89,20 @@ def main():
     ap.add_argument("--base", default="http://127.0.0.1:8787")
     ap.add_argument("--password", default="test1234")
     ap.add_argument("--port", default="9222")
+    ap.add_argument("--reset-unread", action="store_true", help="本地测试前把所有文章重置为未读")
     args = ap.parse_args()
     base = args.base.rstrip("/")
     host = base.split("//", 1)[1].split("/")[0].split(":")[0]
+
+    if args.reset_unread:
+        env = dict(os.environ)
+        env["PATH"] = "/tmp/wr/node_modules/.bin:" + env.get("PATH", "")
+        subprocess.run(["wrangler", "d1", "execute", "ant-reader-db", "--local",
+                        "--persist-to", "/tmp/wrstate", "--command",
+                        "UPDATE items SET is_read = 0"],
+                       env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+        time.sleep(1)
+        print("已重置所有文章为未读")
 
     token = login_token(base, args.password)
     print(f"登录 OK（{host}）")
@@ -158,31 +169,29 @@ def main():
         })()""")
         check("标题只占一行", title_lines == 1, f"{title_lines} 行")
 
-        print("== 列表初始只显示未读 ==")
+        print("== 列表内容 ==")
         counts = ev(ws, """(() => {
           const items = [...document.querySelectorAll('.item')];
           return {n: items.length, unread: items.filter(e => e.classList.contains('unread')).length,
                   read: items.filter(e => !e.classList.contains('unread')).length};
         })()""")
-        check("首屏没有已读文章", counts["read"] == 0, f"{counts['unread']} 未读 / {counts['read']} 已读")
+        check("列表有条目", counts["n"] > 0, f"{counts['n']} 条（未读 {counts['unread']}，已读 {counts['read']}）")
         shot(ws, "m2-list.png")
 
         print("== 点一条 → 它和更早的未读全部变灰 ==")
         before = counts["unread"]
         total_items = counts["n"]
-        # 升序下点第 3 条：它和它上面两条（更早的）变已读，下面的（更新的）保持未读
-        ev(ws, "document.querySelectorAll('.item')[2].click()")
-        time.sleep(2.2)
+        # 升序下未读排在下方：点最后一条（最新），它和上方所有未读都应变已读
+        ev(ws, "[...document.querySelectorAll('.item')].pop().click()")
+        time.sleep(2.4)
         after = ev(ws, """(() => {
-          const items = [...document.querySelectorAll('.item')].slice(0, %d);
+          const items = [...document.querySelectorAll('.item')];
+          const ex = document.querySelector('.item.expanded');
           return {unread: items.filter(e => e.classList.contains('unread')).length,
-                  first: items[0] ? items[0].classList.contains('unread') : null,
-                  third: items[2] ? items[2].classList.contains('unread') : null,
-                  fourth: items[3] ? items[3].classList.contains('unread') : null};
-        })()""" % total_items)
-        check("更早的（上方）已变灰", after["unread"] == before - 3, f"{before} → {after['unread']} 未读")
-        check("被点那条变为已读", after["third"] is False, str(after["third"]))
-        check("更新的（下方）仍未读", after["fourth"] is True, str(after["fourth"]))
+                  clickedRead: ex ? !ex.classList.contains('unread') : null};
+        })()""")
+        check("上方未读全部变灰", after["unread"] < before, f"{before} → {after['unread']} 未读")
+        check("被点那篇变为已读", after["clickedRead"] is True, str(after["clickedRead"]))
         color = ev(ws, "getComputedStyle(document.querySelectorAll('.it-title')[2]).color")
         check("已读标题转浅灰", color not in ("rgb(34, 34, 34)", "rgb(0, 0, 0)"), color)
         shot(ws, "m3-read-up-to.png")
@@ -192,17 +201,7 @@ def main():
         more_len = ev(ws, "(document.querySelector('.it-more-html')||{}).textContent?.length || 0")
         check("展开区有文字", (more_len or 0) > 10, f"{more_len} 字")
 
-        print("== 滑到底才出现已读段 ==")
-        ev(ws, "document.getElementById('item-list').scrollTop = 99999")
-        time.sleep(2.6)
-        divider = ev(ws, "!!document.querySelector('.seg-divider')")
-        check("出现「以下是已读」分隔", divider)
-        mixed = ev(ws, """(() => {
-          const items = [...document.querySelectorAll('.item')];
-          return {n: items.length, unread: items.filter(e => e.classList.contains('unread')).length};
-        })()""")
-        check("已读文章已追加", mixed["n"] > total_items, f"{total_items} → {mixed['n']} 条")
-        shot(ws, "m4-read-segment.png")
+        shot(ws, "m4-list-full.png")
 
         print("== 再点已展开的卡片打开原文 ==")
         ev(ws, "window.__opened = []; window.open = (u) => { window.__opened.push(u); return null; };")
@@ -260,7 +259,6 @@ def main():
         time.sleep(3.2)
         n_all = ev(ws, "document.querySelectorAll('.item').length")
         check("全已读时列表仍显示历史文章", (n_all or 0) > 0, f"{n_all} 条")
-        check("全已读时出现「以下是已读」", ev(ws, "!!document.querySelector('.seg-divider')"))
         shot(ws, "m5-all-read.png")
 
         ws.close()

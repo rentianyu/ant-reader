@@ -400,8 +400,8 @@
   }
 
   /**
-   * 加载文章。
-   * 「全部」筛选下分两段：先只有未读，往下滑到底才追加已读（并显示分隔条）。
+   * 加载文章。整体按发布时间升序（旧在上、新在下），滑到底继续加载更晚的。
+   * 「未读」「收藏」筛选走同一套分页。
    */
   async function loadItems(more = false) {
     if (state.loading) return;
@@ -410,81 +410,15 @@
       if (!more) {
         state.items = [];
         state.expandedId = null;
-        state.readingRead = false;
-        state.readOffset = 0;
-        state.hasMore = true;
-
-        const p = buildParams({ offset: 0 });
-        if (state.filter === 'all' || state.filter === 'unread') p.set('unread', '1');
-        if (state.filter === 'starred') p.set('starred', '1');
-        let data = await api(`/items?${p.toString()}`);
-        if (state.filter === 'all' && data.items.length === 0) {
-          // 一篇未读都没有：直接给已读第一页，避免出现空列表
-          state.readingRead = true;
-          const p2 = buildParams({ offset: 0 });
-          p2.set('read', '1');
-          data = await api(`/items?${p2.toString()}`);
-          state.items = data.items;
-          state.total = data.total;
-          state.unreadTotal = 0;
-          state.readOffset = data.items.length;
-          state.hasMore = data.items.length === PAGE_SIZE;
-        } else {
-          state.items = data.items;
-          state.total = data.total;
-          state.unreadTotal = data.total;
-          state.hasMore = state.filter === 'all' ? true : data.items.length < data.total;
-        }
-        renderItems();
-        return;
+        state.total = 0;
       }
-
-      if (state.filter !== 'all') {
-        if (!state.hasMore) return;
-        const p = buildParams({ offset: state.items.length });
-        if (state.filter === 'unread') p.set('unread', '1');
-        if (state.filter === 'starred') p.set('starred', '1');
-        const data = await api(`/items?${p.toString()}`);
-        state.items = state.items.concat(data.items);
-        state.total = data.total;
-        state.hasMore = state.items.length < data.total;
-        renderItems();
-        return;
-      }
-
-      // 「全部」：先补未读，未读取完再切到已读段
-      if (!state.readingRead) {
-        if (state.items.length < state.unreadTotal) {
-          const p = buildParams({ offset: state.items.length });
-          p.set('unread', '1');
-          const data = await api(`/items?${p.toString()}`);
-          if (!data.items.length) {
-            // 未读已到底（total 可能偏大），校正后让下一轮进入已读段
-            state.unreadTotal = state.items.length;
-            return;
-          }
-          state.items = state.items.concat(data.items);
-          renderItems();
-          return;
-        }
-        state.readingRead = true;
-        const p = buildParams({ offset: 0 });
-        p.set('read', '1');
-        const data = await api(`/items?${p.toString()}`);
-        state.items = state.items.concat(data.items);
-        state.readOffset = data.items.length;
-        state.hasMore = data.items.length === PAGE_SIZE;
-        renderItems();
-        return;
-      }
-
-      if (!state.hasMore) return;
-      const p = buildParams({ offset: state.readOffset });
-      p.set('read', '1');
+      const p = buildParams({ offset: more ? state.items.length : 0 });
+      if (state.filter === 'unread') p.set('unread', '1');
+      if (state.filter === 'starred') p.set('starred', '1');
       const data = await api(`/items?${p.toString()}`);
-      state.items = state.items.concat(data.items);
-      state.readOffset += data.items.length;
-      state.hasMore = data.items.length === PAGE_SIZE;
+      state.items = more ? state.items.concat(data.items) : data.items;
+      state.total = data.total;
+      state.hasMore = state.items.length < data.total;
       renderItems();
     } catch (err) {
       el.itemContainer.innerHTML = `<div class="empty">${escapeHtml(err.message)}</div>`;
@@ -528,17 +462,11 @@
     }
 
     const showFeedMini = state.scope.type !== 'feed';
-    const out = [];
-    let dividerShown = false;
 
-    for (const it of state.items) {
+    el.itemContainer.innerHTML = state.items.map((it) => {
       const active = state.current && state.current.id === it.id;
       const expanded = state.expandedId === it.id;
-      if (state.filter === 'all' && it.is_read && !dividerShown) {
-        out.push(`<div class="seg-divider">以下是已读</div>`);
-        dividerShown = true;
-      }
-      out.push(`<div class="item ${it.is_read ? '' : 'unread'} ${active ? 'active' : ''} ${expanded ? 'expanded' : ''}" data-id="${it.id}" role="button" tabindex="0">
+      return `<div class="item ${it.is_read ? '' : 'unread'} ${active ? 'active' : ''} ${expanded ? 'expanded' : ''}" data-id="${it.id}" role="button" tabindex="0">
         <div class="it-top">
           <div class="it-title">${escapeHtml(it.title || '(无标题)')}</div>
           <div class="it-side">
@@ -553,10 +481,9 @@
         </div>
         ${it.summary ? `<div class="it-summary">${escapeHtml(cleanText(it.summary))}</div>` : ''}
         ${expanded ? renderExpanded(it) : ''}
-      </div>`);
-    }
+      </div>`;
+    }).join('');
 
-    el.itemContainer.innerHTML = out.join('');
     el.listMore.hidden = !state.hasMore;
   }
 
