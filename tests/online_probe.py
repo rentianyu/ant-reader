@@ -111,6 +111,19 @@ def main():
         ev(ws, "document.getElementById('item-list').scrollTop = 99999")
         time.sleep(3.5)
         print("已读分隔已移除:", not ev(ws, "!!document.querySelector('.seg-divider')"))
+        print("时间旧在上新在下:", ev(ws, """(() => {
+          const p = [...document.querySelectorAll('.item')].map(e => e.dataset.pub).filter(Boolean);
+          return p.join('|') === p.slice().sort().join('|');
+        })()"""))
+        print("打开定位到底部:", ev(ws, "(() => { const b = document.getElementById('item-list'); return Math.round(b.scrollTop + b.clientHeight - b.scrollHeight); })()"), "px")
+        print("首屏分布:", ev(ws, """(() => {
+          const its = [...document.querySelectorAll('.item')];
+          const un = its.filter(i => i.classList.contains('unread')).length;
+          const s0 = its[0] ? getComputedStyle(its[0].querySelector('.it-title')) : null;
+          const s1 = its.find(i => !i.classList.contains('unread'));
+          const s1t = s1 ? getComputedStyle(s1.querySelector('.it-title')) : null;
+          return `总数${its.length} 未读${un} 已读${its.length-un} | 首条色${s0?s0.color:''} 重${s0?s0.fontWeight:''} | 已读色${s1t?s1t.color:''} 重${s1t?s1t.fontWeight:''}`;
+        })()"""))
         print("列表总条数:", ev(ws, "document.querySelectorAll('.item').length"))
         shot(ws, "online-3-read-seg.png")
 

@@ -237,8 +237,9 @@ def main():
         check("再点打开原文", isinstance(opened, list) and len(opened) == 1, str(opened)[:70])
 
         print("== 下拉刷新 ==")
-        # 先收起展开、重置列表，避免内部滚动容器拦截手势
-        ev(ws, "document.querySelector('.seg-item[data-filter=all]').click()")
+        # 「全部」列表打开即位于底部、且滚到顶会自动前插历史，手势很难停在顶部，
+        # 故改用「未读」视图（单向向下加载）验证下拉刷新链路。
+        ev(ws, "document.querySelector('.seg-item[data-filter=unread]').click()")
         time.sleep(2.6)
         ev(ws, "document.getElementById('item-list').scrollTop = 0")
         time.sleep(0.5)
@@ -317,6 +318,29 @@ def main():
         ev(ws, "document.getElementById('btn-save-feed').click()")
         time.sleep(2.0)
         check("还原成功", ev(ws, "document.querySelector('.list-title').textContent") == nm)
+
+        print("== 全部：时间正序（旧在上新在下）+ 向上加载 ==")
+        ev(ws, "document.body.dataset.view = 'sources'")
+        time.sleep(0.4)
+        ev(ws, "document.querySelector('.src-entry[data-scope=all]').click()")
+        time.sleep(3.8)
+        pubs = ev(ws, "[...document.querySelectorAll('.item')].map(e => e.dataset.pub).filter(Boolean)")
+        check("有文章", bool(pubs) and len(pubs) > 5, f"{len(pubs) if pubs else 0} 条")
+        check("旧在上新在下（时间单调不减）", pubs == sorted(pubs),
+              f"首 {pubs[0] if pubs else ''} / 末 {pubs[-1] if pubs else ''}")
+        bottom = ev(ws, "(() => { const b = document.getElementById('item-list'); return Math.round(b.scrollTop + b.clientHeight - b.scrollHeight); })()")
+        check("打开即定位到最新（底部）", (bottom if bottom is not None else -99) >= -10, f"距底 {bottom}px")
+        n1 = len(pubs or [])
+        ev(ws, "document.getElementById('item-list').scrollTop = 0")
+        time.sleep(3.6)
+        pubs2 = ev(ws, "[...document.querySelectorAll('.item')].map(e => e.dataset.pub).filter(Boolean)")
+        check("向上滚加载了更早的文章", len(pubs2 or []) > n1, f"{n1} → {len(pubs2 or [])} 条")
+        check("补充后仍单调不减", pubs2 == sorted(pubs2))
+        if pubs and pubs2:
+            check("补进来的是更早的", pubs2[0] <= pubs[0], f"{pubs2[0]} ≤ {pubs[0]}")
+        anchor = ev(ws, "Math.round(document.getElementById('item-list').scrollTop)")
+        check("滚动位置未被重置到顶部", (anchor or 0) > 0, f"scrollTop={anchor}")
+        shot(ws, "m6-upward-load.png")
 
         print("== 全部已读时列表不空白 ==")
         # 用 API 把所有文章标为已读，模拟"读完一轮"

@@ -242,6 +242,7 @@ export async function handleApi(request, env, url) {
         limit: Math.min(parseInt(q.get('limit') || '40', 10) || 40, 100),
         offset: Math.max(parseInt(q.get('offset') || '0', 10) || 0, 0),
         q: (q.get('q') || '').trim() || null,
+        order: q.get('order') === 'desc' ? 'desc' : 'asc',
       });
       return json({ ok: true, ...result });
     }

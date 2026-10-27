@@ -19,9 +19,7 @@
     loading: false,
     expandedId: null,
     itemCache: new Map(),
-    unreadTotal: 0,
-    readingRead: false,
-    readOffset: 0,
+    loadedCount: 0,
     hasMore: true,
   };
 
@@ -408,9 +406,19 @@
     return p;
   }
 
+  /** 「全部」按时间正序（旧→新），打开时定位到最底部（最新一篇） */
+  function scrollItemsToBottom() {
+    requestAnimationFrame(() => {
+      const box = el.itemScroll;
+      box.scrollTop = box.scrollHeight;
+    });
+  }
+
   /**
-   * 加载文章。默认只给未读（按时间升序：旧→新），往下滑到底再追加已读段；
-   * 「未读」「收藏」筛选走普通分页。
+   * 加载文章。
+   * 「全部」：纯时间序，旧的在上、新的在下。首屏取最新一页（desc 取回后反转），打开即滚到底部；
+   *          向上滚到接近顶部时再取更早的一页，插到列表前面并保持当前可视位置。
+   * 「未读」「收藏」：正序分页，向下滚到底追加。
    */
   async function loadItems(more = false) {
     if (state.loading) return;
@@ -419,38 +427,29 @@
       if (!more) {
         state.items = [];
         state.expandedId = null;
-        state.readingRead = false;
-        state.readOffset = 0;
         state.hasMore = true;
+        state.loadedCount = 0;
 
         if (state.filter === 'all') {
           const p = buildParams({ offset: 0 });
-          p.set('unread', '1');
-          let data = await api(`/items?${p.toString()}`);
-          state.unreadTotal = data.total;
-          if (data.items.length === 0) {
-            // 一篇未读都没有 → 直接给已读第一页，避免空列表
-            state.readingRead = true;
-            const p2 = buildParams({ offset: 0 });
-            p2.set('read', '1');
-            data = await api(`/items?${p2.toString()}`);
-            state.readOffset = data.items.length;
-            state.total = data.total;
-            state.hasMore = data.items.length === PAGE_SIZE;
-          } else {
-            state.total = data.total;
-            state.hasMore = true;
-          }
-          state.items = data.items;
-        } else {
-          const p = buildParams({ offset: 0 });
-          if (state.filter === 'unread') p.set('unread', '1');
-          if (state.filter === 'starred') p.set('starred', '1');
+          p.set('order', 'desc');
           const data = await api(`/items?${p.toString()}`);
-          state.items = data.items;
+          state.items = data.items.slice().reverse();
           state.total = data.total;
-          state.hasMore = data.items.length < data.total;
+          state.loadedCount = data.items.length;
+          state.hasMore = state.loadedCount < state.total;
+          renderItems();
+          scrollItemsToBottom();
+          return;
         }
+
+        const p = buildParams({ offset: 0 });
+        if (state.filter === 'unread') p.set('unread', '1');
+        if (state.filter === 'starred') p.set('starred', '1');
+        const data = await api(`/items?${p.toString()}`);
+        state.items = data.items;
+        state.total = data.total;
+        state.hasMore = data.items.length < data.total;
         renderItems();
         return;
       }
@@ -468,39 +467,24 @@
         return;
       }
 
-      // 「全部」：先补未读，未读到底再切已读段
-      if (!state.readingRead) {
-        if (state.items.length < state.unreadTotal) {
-          const p = buildParams({ offset: state.items.length });
-          p.set('unread', '1');
-          const data = await api(`/items?${p.toString()}`);
-          if (!data.items.length) {
-            state.unreadTotal = state.items.length;
-            return;
-          }
-          state.items = state.items.concat(data.items);
-          renderItems();
-          return;
-        }
-        state.readingRead = true;
-        const p = buildParams({ offset: 0 });
-        p.set('read', '1');
-        const data = await api(`/items?${p.toString()}`);
-        state.items = state.items.concat(data.items);
-        state.readOffset = data.items.length;
-        state.hasMore = data.items.length === PAGE_SIZE;
-        renderItems();
+      // 「全部」：向前加载更早的文章
+      if (!state.hasMore) return;
+      const p = buildParams({ offset: state.loadedCount });
+      p.set('order', 'desc');
+      const data = await api(`/items?${p.toString()}`);
+      if (!data.items.length) {
+        state.hasMore = false;
         return;
       }
-
-      if (!state.hasMore) return;
-      const p = buildParams({ offset: state.readOffset });
-      p.set('read', '1');
-      const data = await api(`/items?${p.toString()}`);
-      state.items = state.items.concat(data.items);
-      state.readOffset += data.items.length;
-      state.hasMore = data.items.length === PAGE_SIZE;
+      const older = data.items.slice().reverse();
+      const box = el.itemScroll;
+      const prevH = box.scrollHeight;
+      const prevTop = box.scrollTop;
+      state.items = older.concat(state.items);
+      state.loadedCount += data.items.length;
+      state.hasMore = state.loadedCount < state.total;
       renderItems();
+      box.scrollTop = prevTop + (box.scrollHeight - prevH);
     } catch (err) {
       el.itemContainer.innerHTML = `<div class="empty">${escapeHtml(err.message)}</div>`;
     } finally {
@@ -509,7 +493,7 @@
     }
   }
 
-  /** 列表内容不足一屏时自动续载，否则用户滑不动、看不到后面的已读段 */
+  /** 列表内容不足一屏时自动续载（全部=继续往前加载更早的文章，填满一屏为止） */
   let autoLoadDepth = 0;
   function maybeAutoLoad() {
     if (state.loading || !state.hasMore) return;
@@ -523,12 +507,16 @@
     });
   }
 
-  /* 滑到底部自动加载下一段 */
+  /* 滚动加载：全部=滚到接近顶部时向前补更早的；未读/收藏=滚到底部追加 */
   let scrollLock = false;
   el.itemScroll.addEventListener('scroll', () => {
     if (scrollLock || state.loading) return;
     const { scrollTop, clientHeight, scrollHeight } = el.itemScroll;
-    if (scrollTop + clientHeight < scrollHeight - 240) return;
+    if (state.filter === 'all') {
+      if (scrollTop > 260) return;
+    } else if (scrollTop + clientHeight < scrollHeight - 240) {
+      return;
+    }
     scrollLock = true;
     loadItems(true).finally(() => {
       setTimeout(() => { scrollLock = false; }, 450);
@@ -548,7 +536,7 @@
     for (const it of state.items) {
       const active = state.current && state.current.id === it.id;
       const expanded = state.expandedId === it.id;
-      out.push(`<div class="item ${it.is_read ? '' : 'unread'} ${active ? 'active' : ''} ${expanded ? 'expanded' : ''}" data-id="${it.id}" role="button" tabindex="0">
+      out.push(`<div class="item ${it.is_read ? '' : 'unread'} ${active ? 'active' : ''} ${expanded ? 'expanded' : ''}" data-id="${it.id}" data-pub="${escapeHtml(it.published_at || it.fetched_at || '')}" role="button" tabindex="0">
         <div class="it-top">
           <div class="it-title">${escapeHtml(it.title || '(无标题)')}</div>
           <div class="it-side">

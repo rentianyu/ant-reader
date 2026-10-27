@@ -127,7 +127,7 @@ export async function insertItems(db, feedId, items) {
 }
 
 export async function listItems(db, opts = {}) {
-  const { feedId, groupId, unreadOnly, readOnly, starredOnly, limit = 40, offset = 0, q } = opts;
+  const { feedId, groupId, unreadOnly, readOnly, starredOnly, limit = 40, offset = 0, q, order = 'asc' } = opts;
   const where = [];
   const binds = [];
   if (feedId) { where.push('i.feed_id = ?'); binds.push(feedId); }
@@ -137,12 +137,13 @@ export async function listItems(db, opts = {}) {
   if (starredOnly) where.push('i.is_starred = 1');
   if (q) { where.push('(i.title LIKE ? OR i.summary LIKE ?)'); binds.push(`%${q}%`, `%${q}%`); }
 
+  const dir = order === 'desc' ? 'DESC' : 'ASC';
   const sql = `
     SELECT i.id, i.feed_id, i.title, i.link, i.author, i.summary, i.published_at, i.fetched_at,
            i.is_read, i.is_starred, f.title AS feed_title, f.site_url AS feed_site_url
     FROM items i JOIN feeds f ON f.id = i.feed_id
     ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
-    ORDER BY COALESCE(i.published_at, i.fetched_at) ASC, i.id ASC
+    ORDER BY COALESCE(i.published_at, i.fetched_at) ${dir}, i.id ${dir}
     LIMIT ? OFFSET ?
   `;
   const countSql = `

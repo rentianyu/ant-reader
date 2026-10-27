@@ -39,7 +39,7 @@ J=/tmp/seed_cookies.txt
 rm -f "$J"
 curl -s -c "$J" -X POST -H 'content-type: application/json' \
   -d '{"password":"test1234"}' http://127.0.0.1:8787/api/setup >/dev/null
-for u in https://www.ruanyifeng.com/blog/atom.xml https://sspai.com/feed https://51.ruyo.net/feed; do
+for u in https://www.ruanyifeng.com/blog/atom.xml https://sspai.com/feed https://51.ruyo.net/feed https://www.solidot.org/index.rss https://www.ifanr.com/feed https://www.oschina.net/news/rss; do
   printf '  + %s ' "$u"
   curl -s -b "$J" --max-time 90 -X POST -H 'content-type: application/json' \
     -d "{\"url\":\"$u\"}" http://127.0.0.1:8787/api/feeds | head -c 120
