@@ -544,15 +544,10 @@
 
     const showFeedMini = state.scope.type !== 'feed';
     const out = [];
-    let dividerShown = false;
 
     for (const it of state.items) {
       const active = state.current && state.current.id === it.id;
       const expanded = state.expandedId === it.id;
-      if (state.filter === 'all' && it.is_read && !dividerShown && state.readingRead) {
-        out.push(`<div class="seg-divider">以下是已读</div>`);
-        dividerShown = true;
-      }
       out.push(`<div class="item ${it.is_read ? '' : 'unread'} ${active ? 'active' : ''} ${expanded ? 'expanded' : ''}" data-id="${it.id}" role="button" tabindex="0">
         <div class="it-top">
           <div class="it-title">${escapeHtml(it.title || '(无标题)')}</div>

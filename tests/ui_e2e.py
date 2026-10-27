@@ -253,8 +253,14 @@ def main():
         time.sleep(1.2)
         txt = ev(ws, "document.querySelector('#ptr .ptr-text').textContent")
         check("松手进入刷新态", txt in ("刷新中…", "已刷新", "刷新失败"), txt)
-        time.sleep(6)
-        check("刷新后指示器收起", ev(ws, "parseInt(document.getElementById('ptr').style.height) || 0") == 0)
+        # 刷新会真实抓取全部订阅源，耗时不定 → 轮询等待最多 25s
+        settled = False
+        for _ in range(25):
+            time.sleep(1)
+            if ev(ws, "parseInt(document.getElementById('ptr').style.height) || 0") == 0:
+                settled = True
+                break
+        check("刷新后指示器收起", settled)
 
         print("== 桌面端两栏 ==")
         ev(ws, "document.body.dataset.view = 'sources'")

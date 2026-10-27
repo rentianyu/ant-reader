@@ -110,7 +110,7 @@ def main():
         # 滑到底，看已读段是否追加（只读操作，不改数据）
         ev(ws, "document.getElementById('item-list').scrollTop = 99999")
         time.sleep(3.5)
-        print("已读分隔出现:", ev(ws, "!!document.querySelector('.seg-divider')"))
+        print("已读分隔已移除:", not ev(ws, "!!document.querySelector('.seg-divider')"))
         print("列表总条数:", ev(ws, "document.querySelectorAll('.item').length"))
         shot(ws, "online-3-read-seg.png")
 
@@ -127,6 +127,17 @@ def main():
               "标题字号:", ev(ws, "getComputedStyle(document.querySelector('.it-title')).fontSize"))
         print("阅读栏:", ev(ws, "getComputedStyle(document.getElementById('pane-reader')).display"))
         shot(ws, "online-4-desktop.png")
+
+        # 订阅源信息面板（只读，不保存）
+        ev(ws, "document.querySelector('.src-entry[data-scope=feed]').click()")
+        time.sleep(3.2)
+        print("左栏宽度:", ev(ws, "Math.round(document.querySelector('.pane-sources').getBoundingClientRect().width)"), "px")
+        print("信息按钮可见:", not ev(ws, "document.getElementById('btn-feed-info').hidden"))
+        ev(ws, "document.getElementById('btn-feed-info').click()")
+        time.sleep(1.2)
+        print("面板打开:", not ev(ws, "document.getElementById('modal-feed').hidden"))
+        print("名称:", ev(ws, "document.getElementById('feed-name').value"))
+        shot(ws, "online-5-feed-info.png")
         ws.close()
     finally:
         chrome.terminate()
