@@ -409,12 +409,30 @@
     return p;
   }
 
-  /** 「全部」按时间正序（旧→新），打开时定位到最底部（最新一篇） */
-  function scrollItemsToBottom() {
-    requestAnimationFrame(() => {
-      const box = el.itemScroll;
-      box.scrollTop = box.scrollHeight;
-    });
+  /**
+   * 打开列表时的定位：把「最旧的一条未读」顶到屏幕上边缘，方便从断点续读；
+   * 若当前列表里没有未读，则落到底部（最新一篇）。
+   */
+  let suppressScrollLoad = 0;
+
+  function scrollToFirstUnread() {
+    const box = el.itemScroll;
+    const place = () => {
+      const first = el.itemContainer.querySelector('.item.unread');
+      if (!first) {
+        box.scrollTop = box.scrollHeight;
+        return;
+      }
+      const offset = first.getBoundingClientRect().top - box.getBoundingClientRect().top + box.scrollTop;
+      box.scrollTop = Math.max(0, offset - 6);
+    };
+    place();
+    suppressScrollLoad = Date.now() + 700;
+    // 视图刚切换/字体排版未稳时首帧可能测不准，稍后再校一次
+    setTimeout(() => {
+      place();
+      suppressScrollLoad = Date.now() + 500;
+    }, 130);
   }
 
   /**
@@ -442,7 +460,7 @@
           state.loadedCount = data.items.length;
           state.hasMore = state.loadedCount < state.total;
           renderItems();
-          scrollItemsToBottom();
+          scrollToFirstUnread();
           return;
         }
 
@@ -499,6 +517,8 @@
   /** 列表内容不足一屏时自动续载（全部=继续往前加载更早的文章，填满一屏为止） */
   let autoLoadDepth = 0;
   function maybeAutoLoad() {
+    // 时间序列表（全部）：首屏定位到最旧未读，不再自动向前补历史，避免刚打开就往前翻
+    if (state.filter === 'all') return;
     if (state.loading || !state.hasMore) return;
     if (autoLoadDepth > 10) return;
     const box = el.itemScroll;
@@ -513,7 +533,7 @@
   /* 滚动加载：全部=滚到接近顶部时向前补更早的；未读/收藏=滚到底部追加 */
   let scrollLock = false;
   el.itemScroll.addEventListener('scroll', () => {
-    if (scrollLock || state.loading) return;
+    if (scrollLock || state.loading || Date.now() < suppressScrollLoad) return;
     const { scrollTop, clientHeight, scrollHeight } = el.itemScroll;
     if (state.filter === 'all') {
       if (scrollTop > 260) return;

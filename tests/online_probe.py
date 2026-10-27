@@ -107,7 +107,14 @@ def main():
         })()"""))
         shot(ws, "online-2-list.png")
 
-        # 滑到底，看已读段是否追加（只读操作，不改数据）
+        print("打开时未读定位:", ev(ws, """(() => {
+          const box = document.getElementById('item-list');
+          const un = document.querySelector('.item.unread');
+          if (!un) return '无未读 → 距底 ' + Math.round(box.scrollTop + box.clientHeight - box.scrollHeight) + 'px';
+          return Math.round(un.getBoundingClientRect().top - box.getBoundingClientRect().top) + 'px';
+        })()"""))
+
+        # 滑到底（只读操作）
         ev(ws, "document.getElementById('item-list').scrollTop = 99999")
         time.sleep(3.5)
         print("已读分隔已移除:", not ev(ws, "!!document.querySelector('.seg-divider')"))
@@ -115,7 +122,7 @@ def main():
           const p = [...document.querySelectorAll('.item')].map(e => e.dataset.pub).filter(Boolean);
           return p.join('|') === p.slice().sort().join('|');
         })()"""))
-        print("打开定位到底部:", ev(ws, "(() => { const b = document.getElementById('item-list'); return Math.round(b.scrollTop + b.clientHeight - b.scrollHeight); })()"), "px")
+        print("滚到底后距底:", ev(ws, "(() => { const b = document.getElementById('item-list'); return Math.round(b.scrollTop + b.clientHeight - b.scrollHeight); })()"), "px")
         print("首屏分布:", ev(ws, """(() => {
           const its = [...document.querySelectorAll('.item')];
           const un = its.filter(i => i.classList.contains('unread')).length;

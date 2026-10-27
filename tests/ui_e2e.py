@@ -181,7 +181,9 @@ def main():
         print("== 点一条 → 只有它变已读（不连带清空） ==")
         before = counts["unread"]
         total_items = counts["n"]
-        # 升序下点最后一条未读（最新的未读）
+        # 升序下点最后一条未读（最新的未读），先记下点击前的未读 id 集合
+        clicked_id = ev(ws, "(() => { const un = [...document.querySelectorAll('.item.unread')]; const t = un.length ? un[un.length - 1] : null; return t ? t.dataset.id : null; })()")
+        unread_ids = ev(ws, "[...document.querySelectorAll('.item.unread')].map(e => e.dataset.id)")
         ev(ws, "(() => { const un = [...document.querySelectorAll('.item.unread')]; (un.length ? un[un.length - 1] : [...document.querySelectorAll('.item')].pop()).click(); })()")
         time.sleep(2.4)
         after = ev(ws, """(() => {
@@ -191,7 +193,8 @@ def main():
                   clickedRead: ex ? !ex.classList.contains('unread') : null};
         })()""")
         check("被点那篇变为已读", after["clickedRead"] is True, str(after["clickedRead"]))
-        check("其余未读保持不变（只减 1）", after["unread"] == before - 1, f"{before} → {after['unread']} 未读")
+        kept = ev(ws, "(() => { const s = new Set([...document.querySelectorAll('.item.unread')].map(e => e.dataset.id)); return %s.filter(i => i !== '%s').every(i => s.has(i)); })()" % (json.dumps(unread_ids), clicked_id))
+        check("其余未读未被连带标记", kept is True, f"原 {len(unread_ids or [])} 条未读")
         color = ev(ws, "getComputedStyle(document.querySelector('.item.expanded .it-title')).color")
         check("已读标题转浅灰", color not in ("rgb(34, 34, 34)", "rgb(0, 0, 0)"), color)
         shot(ws, "m3-read-one.png")
@@ -383,7 +386,7 @@ def main():
         ev(ws, "document.querySelector('#modal-feed [data-close=feed]').click()")
         time.sleep(0.5)
 
-        print("== 全部：时间正序（旧在上新在下）+ 向上加载 ==")
+        print("== 全部：时间正序 + 未读定位 + 向上加载 ==")
         ev(ws, "document.body.dataset.view = 'sources'")
         time.sleep(0.4)
         ev(ws, "document.querySelector('.src-entry[data-scope=all]').click()")
@@ -394,8 +397,17 @@ def main():
               f"首 {pubs[0] if pubs else ''} / 末 {pubs[-1] if pubs else ''}")
         check("底部是「已是最新」提示", ev(ws, "!document.getElementById('latest-tip').hidden"))
         check("不显示「加载更多」按钮", ev(ws, "document.getElementById('btn-more').hidden"))
-        bottom = ev(ws, "(() => { const b = document.getElementById('item-list'); return Math.round(b.scrollTop + b.clientHeight - b.scrollHeight); })()")
-        check("打开即定位到最新（底部）", (bottom if bottom is not None else -99) >= -10, f"距底 {bottom}px")
+        pos = ev(ws, """(() => {
+          const box = document.getElementById('item-list');
+          const un = document.querySelector('.item.unread');
+          const bt = box.getBoundingClientRect().top;
+          if (un) return {mode: 'unread', offset: Math.round(un.getBoundingClientRect().top - bt)};
+          return {mode: 'bottom', offset: Math.round(box.scrollTop + box.clientHeight - box.scrollHeight)};
+        })()""")
+        if pos and pos["mode"] == "unread":
+            check("最旧未读定位在屏幕上方", -6 <= pos["offset"] <= 26, f"距顶 {pos['offset']}px")
+        else:
+            check("无未读时定位到底部", (pos or {}).get("offset", -99) >= -10, f"距底 {pos and pos['offset']}px")
         n1 = len(pubs or [])
         ev(ws, "document.getElementById('item-list').scrollTop = 0")
         time.sleep(3.6)
