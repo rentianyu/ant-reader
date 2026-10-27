@@ -185,11 +185,7 @@
         </button>
       </div>
       <div class="modal-body">
-        <label class="field">
-          <span class="label">自动刷新间隔（分钟）</span>
-          <input id="set-interval" class="input" type="number" min="5" max="720" step="5" />
-        </label>
-        <div class="hint">定时抓取由 Cloudflare Cron 执行，默认每 30 分钟轮转一批订阅源。</div>
+        <div class="hint">定时抓取由 Cloudflare Cron 执行：每 30 分钟一次，每次最多 40 个订阅源、并发 5；源超过 40 个时按「最久未抓」轮转。</div>
         <div class="divider"></div>
         <div class="field">
           <span class="label">修改访问密码</span>

@@ -12,7 +12,7 @@ const MAX_BYTES = 6 * 1024 * 1024;
 const MAX_ITEMS_PER_FETCH = 100;
 const MAX_CONTENT_CHARS = 200000;
 /** 每个源保留的历史条数上限 */
-const FEED_KEEP_ITEMS = 200;
+const FEED_KEEP_ITEMS = 300;
 
 /** 读取响应体字节（不解码），上限 maxBytes */
 async function readLimited(res, maxBytes = MAX_BYTES) {

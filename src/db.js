@@ -263,7 +263,6 @@ export async function bootstrapData(db) {
     db.prepare('SELECT COUNT(*) AS c FROM items WHERE is_starred = 1'),
     db.prepare('SELECT COUNT(*) AS c FROM feeds'),
     db.prepare('SELECT COUNT(*) AS c FROM items'),
-    db.prepare("SELECT value FROM settings WHERE key = 'refresh_interval_minutes'"),
   ]);
   return {
     groups: res[0].results || [],
@@ -274,7 +273,7 @@ export async function bootstrapData(db) {
       feeds: countOf(res[4]),
       items: countOf(res[5]),
     },
-    settings: { refreshInterval: parseInt(res[6].results?.[0]?.value || '30', 10) || 30 },
+    settings: {},
   };
 }
 

@@ -44,7 +44,7 @@ export default {
 
       await Promise.all(Array.from({ length: Math.min(concurrency, feeds.length) }, worker));
 
-      // 保留策略：默认不按天数清理（每个源 200 条的硬上限在抓取时已处理）
+      // 保留策略：默认不按天数清理（每个源 300 条的硬上限在抓取时已处理）
       try {
         const retention = parseInt(await getSetting(env.DB, 'retention_days', '0'), 10);
         if (retention > 0) {

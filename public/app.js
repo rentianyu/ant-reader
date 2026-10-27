@@ -9,7 +9,7 @@
     groups: [],
     feeds: [],
     counts: { unread: 0, starred: 0, feeds: 0, items: 0 },
-    settings: { refreshInterval: 30 },
+    settings: {},
     scope: { type: 'all', id: null },
     filter: 'all',
     items: [],
@@ -1209,7 +1209,6 @@
 
   /* ------------------------------ 设置 ------------------------------ */
   function openSettings() {
-    $('#set-interval').value = state.settings.refreshInterval || 30;
     $('#set-oldpass').value = '';
     $('#set-newpass').value = '';
     $('#set-err').textContent = '';
@@ -1219,13 +1218,10 @@
   }
 
   $('#btn-save-settings').addEventListener('click', async () => {
-    const interval = parseInt($('#set-interval').value, 10) || 30;
     const oldPass = $('#set-oldpass').value;
     const newPass = $('#set-newpass').value;
     $('#set-err').textContent = '';
     try {
-      const r = await api('/settings', { method: 'PATCH', body: { refreshInterval: interval } });
-      state.settings = { ...state.settings, ...r.settings };
       if (newPass) {
         if (newPass.length < 4) throw new Error('新密码至少 4 位');
         await api('/password', { method: 'POST', body: { oldPassword: oldPass, newPassword: newPass } });

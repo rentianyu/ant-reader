@@ -314,17 +314,12 @@ export async function handleApi(request, env, url) {
 
     if (path === '/settings' && method === 'PATCH') {
       const body = await readJson(request);
-      if (body?.refreshInterval !== undefined) {
-        const v = Math.max(5, Math.min(parseInt(body.refreshInterval, 10) || 30, 720));
-        await db.setSetting(env.DB, 'refresh_interval_minutes', String(v));
-      }
       if (body?.defaultFilter) {
         await db.setSetting(env.DB, 'default_filter', String(body.defaultFilter));
       }
       return json({
         ok: true,
         settings: {
-          refreshInterval: parseInt(await db.getSetting(env.DB, 'refresh_interval_minutes', '30'), 10),
           defaultFilter: await db.getSetting(env.DB, 'default_filter', 'all'),
         },
       });
