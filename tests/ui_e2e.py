@@ -178,11 +178,11 @@ def main():
         check("列表有条目", counts["n"] > 0, f"{counts['n']} 条（未读 {counts['unread']}，已读 {counts['read']}）")
         shot(ws, "m2-list.png")
 
-        print("== 点一条 → 它和更早的未读全部变灰 ==")
+        print("== 点一条 → 只有它变已读（不连带清空） ==")
         before = counts["unread"]
         total_items = counts["n"]
-        # 升序下未读排在下方：点最后一条（最新），它和上方所有未读都应变已读
-        ev(ws, "[...document.querySelectorAll('.item')].pop().click()")
+        # 升序下点最后一条未读（最新的未读）
+        ev(ws, "(() => { const un = [...document.querySelectorAll('.item.unread')]; (un.length ? un[un.length - 1] : [...document.querySelectorAll('.item')].pop()).click(); })()")
         time.sleep(2.4)
         after = ev(ws, """(() => {
           const items = [...document.querySelectorAll('.item')];
@@ -190,11 +190,11 @@ def main():
           return {unread: items.filter(e => e.classList.contains('unread')).length,
                   clickedRead: ex ? !ex.classList.contains('unread') : null};
         })()""")
-        check("上方未读全部变灰", after["unread"] < before, f"{before} → {after['unread']} 未读")
         check("被点那篇变为已读", after["clickedRead"] is True, str(after["clickedRead"]))
-        color = ev(ws, "getComputedStyle(document.querySelectorAll('.it-title')[2]).color")
+        check("其余未读保持不变（只减 1）", after["unread"] == before - 1, f"{before} → {after['unread']} 未读")
+        color = ev(ws, "getComputedStyle(document.querySelector('.item.expanded .it-title')).color")
         check("已读标题转浅灰", color not in ("rgb(34, 34, 34)", "rgb(0, 0, 0)"), color)
-        shot(ws, "m3-read-up-to.png")
+        shot(ws, "m3-read-one.png")
 
         print("== 展开区（同为已读那一击） ==")
         check("卡片原地展开", ev(ws, "!!document.querySelector('.item.expanded')"))
@@ -333,6 +333,55 @@ def main():
         shot(ws, "m7-settings.png")
         ev(ws, "document.querySelector('#modal-settings [data-close=settings]').click()")
         time.sleep(0.4)
+
+        print("== 整理订阅：搜索 + 新建分组弹窗 ==")
+        ev(ws, "window.confirm = () => true")
+        ev(ws, "document.body.dataset.view = 'sources'")
+        time.sleep(0.4)
+        ev(ws, "document.getElementById('btn-menu').click()")
+        time.sleep(0.4)
+        ev(ws, "document.querySelector('[data-act=manage]').click()")
+        time.sleep(0.9)
+        check("整理订阅已打开", not ev(ws, "document.getElementById('modal-manage').hidden"))
+        n_before = ev(ws, "document.querySelectorAll('.mf-item').length")
+        check("默认列出全部订阅源", (n_before or 0) > 5, f"{n_before} 个")
+        kw = ev(ws, "document.querySelector('.mf-item .mf-title').textContent.slice(0, 2)")
+        ev(ws, "document.getElementById('manage-search').value = %s" % json.dumps(kw))
+        ev(ws, "document.getElementById('manage-search').dispatchEvent(new Event('input'))")
+        time.sleep(0.5)
+        n_after = ev(ws, "document.querySelectorAll('.mf-item').length")
+        check("搜索即时过滤订阅源", (n_after or 0) < (n_before or 0), f"{n_before} → {n_after} 个")
+        ev(ws, "document.getElementById('manage-search').value = ''")
+        ev(ws, "document.getElementById('manage-search').dispatchEvent(new Event('input'))")
+        time.sleep(0.4)
+        ev(ws, "document.getElementById('btn-open-newgroup').click()")
+        time.sleep(0.6)
+        check("新建分组弹窗打开", not ev(ws, "document.getElementById('modal-newgroup').hidden"))
+        ev(ws, "document.getElementById('new-group-name').value = '测试分组'")
+        ev(ws, "document.getElementById('btn-create-group').click()")
+        time.sleep(1.8)
+        check("新建后弹窗关闭", ev(ws, "document.getElementById('modal-newgroup').hidden"))
+        check("分组出现在列表里", ev(ws, "[...document.querySelectorAll('#group-chips .chip')].some(c => c.textContent.includes('测试分组'))"))
+        shot(ws, "m8-manage.png")
+        gid = ev(ws, "(() => { const c = [...document.querySelectorAll('#group-chips .chip')].find(c => c.textContent.includes('测试分组')); return c ? c.dataset.gid : null; })()")
+        if gid:
+            ev(ws, "document.querySelector('[data-del-group=\"%s\"]').click()" % gid)
+            time.sleep(1.4)
+        check("测试分组已清理", not ev(ws, "[...document.querySelectorAll('#group-chips .chip')].some(c => c.textContent.includes('测试分组'))"))
+        ev(ws, "document.querySelector('#modal-manage [data-close=manage]').click()")
+        time.sleep(0.5)
+
+        print("== 订阅源信息：删除订阅源入口 ==")
+        ev(ws, "document.querySelector('.src-entry[data-scope=feed]').click()")
+        time.sleep(2.6)
+        ev(ws, "document.getElementById('btn-feed-info').click()")
+        time.sleep(0.8)
+        check("信息弹窗已打开", not ev(ws, "document.getElementById('modal-feed').hidden"))
+        check("有删除订阅源按钮", ev(ws, "!!document.getElementById('btn-delete-feed')"))
+        check("按钮文字为删除订阅源", ev(ws, "document.getElementById('btn-delete-feed').textContent.trim()") == "删除订阅源")
+        shot(ws, "m9-feed-delete.png")
+        ev(ws, "document.querySelector('#modal-feed [data-close=feed]').click()")
+        time.sleep(0.5)
 
         print("== 全部：时间正序（旧在上新在下）+ 向上加载 ==")
         ev(ws, "document.body.dataset.view = 'sources'")

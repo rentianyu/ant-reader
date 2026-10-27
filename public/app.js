@@ -50,6 +50,7 @@
     toast: $('#toast'),
     modalAdd: $('#modal-add'),
     modalManage: $('#modal-manage'),
+    modalNewGroup: $('#modal-newgroup'),
     modalSettings: $('#modal-settings'),
     modalFeed: $('#modal-feed'),
   };
@@ -622,7 +623,7 @@
   async function expandItem(id) {
     state.expandedId = id;
     renderItems();
-    markReadUpTo(id);
+    markItemRead(id);
     setTimeout(() => fitExpandedCard(id), 40);
     if (state.itemCache.has(id)) return;
     try {
@@ -639,29 +640,18 @@
     }
   }
 
-  /** 点击某篇：它以及比它更早的未读全部标为已读（列表按旧→新排列，更早的在上方） */
-  async function markReadUpTo(id) {
-    const idx = state.items.findIndex((x) => x.id === id);
-    if (idx < 0) return;
-    let localChanged = 0;
-    for (let i = 0; i <= idx; i++) {
-      if (!state.items[i].is_read) {
-        state.items[i].is_read = 1;
-        localChanged++;
-      }
-    }
-    if (!localChanged) return;
+  /** 点击某篇：只把这一篇标为已读（不连带更早的，避免误清整列未读） */
+  async function markItemRead(id) {
+    const it = state.items.find((x) => x.id === id);
+    if (!it || it.is_read) return;
+    it.is_read = 1;
+    const f = state.feeds.find((x) => x.id === it.feed_id);
+    if (f && f.unread > 0) f.unread -= 1;
+    state.counts.unread = Math.max(0, (state.counts.unread || 0) - 1);
     renderItems();
-
-    const body = { itemId: id };
-    if (state.scope.type === 'feed') body.feedId = state.scope.id;
-    else if (state.scope.type === 'group') body.groupId = state.scope.id;
+    renderSources();
     try {
-      const r = await api('/read-before', { method: 'POST', body });
-      if (r.feeds) state.feeds = r.feeds;
-      if (r.groups) state.groups = r.groups;
-      state.counts.unread = state.feeds.reduce((s, f) => s + (f.unread || 0), 0);
-      renderSources();
+      await api(`/items/${id}`, { method: 'PATCH', body: { read: true } });
     } catch {
       /* 网络失败时本地已更新，下次加载会校准 */
     }
@@ -730,7 +720,7 @@
       }
       state.current = item;
       renderReader(item);
-      markReadUpTo(id);
+      markItemRead(id);
       const row = state.items.find((x) => x.id === id);
       if (row) row.is_read = 1;
       renderItems();
@@ -912,6 +902,24 @@
     if (e.key === 'Enter') $('#btn-save-feed').click();
   });
 
+  $('#btn-delete-feed').addEventListener('click', async () => {
+    if (state.scope.type !== 'feed') return;
+    const id = state.scope.id;
+    const f = state.feeds.find((x) => x.id === id);
+    if (!confirm(`删除订阅「${f ? f.title || f.url : id}」？\n该源已抓取的文章会一并删除，不可恢复。`)) return;
+    try {
+      const r = await api(`/feeds/${id}`, { method: 'DELETE' });
+      state.feeds = r.feeds;
+      state.groups = r.groups;
+      closeModal('feed');
+      await selectScope({ type: 'all' });
+      renderManage(); renderSources(); fillGroupSelect();
+      toast('已删除订阅');
+    } catch (err) {
+      $('#feed-err').textContent = err.message;
+    }
+  });
+
   /* ---------------------------- 下拉刷新 ---------------------------- */
 
   function setupPullToRefresh(scroller, ptrEl, onRefresh) {
@@ -1044,7 +1052,7 @@
   applyTheme(localStorage.getItem('ant.theme') || 'light');
 
   /* ------------------------------ 弹层通用 ------------------------------ */
-  const modals = { add: el.modalAdd, manage: el.modalManage, settings: el.modalSettings, feed: el.modalFeed };
+  const modals = { add: el.modalAdd, manage: el.modalManage, settings: el.modalSettings, feed: el.modalFeed, newgroup: el.modalNewGroup };
   function closeModal(name) {
     if (modals[name]) modals[name].hidden = true;
   }
@@ -1106,17 +1114,25 @@
 
   /* ------------------------------ 整理订阅 ------------------------------ */
   function openManage() {
+    $('#manage-search').value = '';
     renderManage();
     el.modalManage.hidden = false;
+    setTimeout(() => $('#manage-search').focus(), 80);
   }
 
   function renderManage() {
+    const kw = ($('#manage-search').value || '').trim().toLowerCase();
+
     $('#group-chips').innerHTML = state.groups.map((g) => `
       <span class="chip" data-gid="${g.id}">${escapeHtml(g.name)}
         <button data-del-group="${g.id}" title="删除分组">×</button>
       </span>`).join('') || `<span class="hint">还没有分组</span>`;
 
-    $('#manage-feeds').innerHTML = state.feeds.map((f) => `
+    const list = kw
+      ? state.feeds.filter((f) => (f.title || '').toLowerCase().includes(kw) || (f.url || '').toLowerCase().includes(kw))
+      : state.feeds;
+
+    $('#manage-feeds').innerHTML = list.map((f) => `
       <div class="mf-item" data-fid="${f.id}">
         <div class="mf-main">
           <div class="mf-title">${escapeHtml(f.title || f.url)}</div>
@@ -1129,21 +1145,38 @@
         <button class="icon-btn sm mf-del" data-del-feed="${f.id}" title="删除">
           <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M5 7h14M10 7V5h4v2M6.5 7l.8 12h9.4l.8-12"/></svg>
         </button>
-      </div>`).join('') || `<div class="empty">还没有订阅源</div>`;
+      </div>`).join('')
+      || (kw
+        ? `<div class="empty">没有匹配「${escapeHtml(kw)}」的订阅源</div>`
+        : `<div class="empty">还没有订阅源</div>`);
   }
 
-  $('#btn-new-group').addEventListener('click', async () => {
-    const name = $('#new-group').value.trim();
-    if (!name) return;
+  /* 搜索订阅源：输入即过滤 */
+  $('#manage-search').addEventListener('input', renderManage);
+
+  /* 新建分组：先点按钮，再在弹窗里填名字 */
+  $('#btn-open-newgroup').addEventListener('click', () => {
+    $('#new-group-name').value = '';
+    $('#newgroup-err').textContent = '';
+    el.modalNewGroup.hidden = false;
+    setTimeout(() => $('#new-group-name').focus(), 80);
+  });
+
+  async function createGroup() {
+    const name = $('#new-group-name').value.trim();
+    if (!name) { $('#newgroup-err').textContent = '请输入分组名称'; return; }
     try {
       const r = await api('/groups', { method: 'POST', body: { name } });
       state.groups = r.groups;
-      $('#new-group').value = '';
-      renderManage();
-      renderSources();
-      fillGroupSelect();
-    } catch (err) { toast(err.message); }
-  });
+      closeModal('newgroup');
+      renderManage(); renderSources(); fillGroupSelect();
+      toast('分组已创建');
+    } catch (err) {
+      $('#newgroup-err').textContent = err.message;
+    }
+  }
+  $('#btn-create-group').addEventListener('click', createGroup);
+  $('#new-group-name').addEventListener('keydown', (e) => { if (e.key === 'Enter') createGroup(); });
 
   el.modalManage.addEventListener('click', async (e) => {
     const delGroup = e.target.closest('[data-del-group]');

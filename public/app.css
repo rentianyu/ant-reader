@@ -101,6 +101,9 @@ button { cursor: pointer; border: 0; background: none; padding: 0; }
 .btn.primary:disabled { opacity: 0.5; cursor: default; }
 .btn.ghost { background: var(--bg-hover); color: var(--text-2); }
 .btn.ghost:hover { background: var(--line); }
+.btn.danger { background: transparent; color: var(--danger); border: 1px solid var(--danger); }
+.btn.danger:hover { background: var(--danger); color: #fff; }
+.foot-gap { flex: 1; }
 .btn.sm { height: 32px; padding: 0 14px; font-size: 13.5px; }
 .btn.block { width: 100%; }
 

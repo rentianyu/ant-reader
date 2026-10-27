@@ -159,12 +159,12 @@
         </button>
       </div>
       <div class="modal-body">
+        <div class="manage-row">
+          <input id="manage-search" class="input" placeholder="搜索订阅源（名称或地址）" autocomplete="off" />
+        </div>
         <div class="manage-groups">
-          <div class="manage-row">
-            <input id="new-group" class="input" placeholder="新建分组名" />
-            <button class="btn primary sm" id="btn-new-group">新建</button>
-          </div>
           <div class="chips" id="group-chips"></div>
+          <button class="btn ghost sm" id="btn-open-newgroup">＋ 新建分组</button>
         </div>
         <div class="manage-feeds" id="manage-feeds"></div>
       </div>
@@ -230,8 +230,34 @@
         <div class="modal-err" id="feed-err"></div>
       </div>
       <div class="modal-foot">
+        <button class="btn danger" id="btn-delete-feed">删除订阅源</button>
+        <span class="foot-gap"></span>
         <button class="btn ghost" data-close="feed">取消</button>
         <button class="btn primary" id="btn-save-feed">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================= 新建分组 ======================= -->
+  <div class="modal" id="modal-newgroup" hidden>
+    <div class="modal-mask" data-close="newgroup"></div>
+    <div class="modal-card">
+      <div class="modal-head">
+        <h3>新建分组</h3>
+        <button class="icon-btn sm" data-close="newgroup" aria-label="关闭">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <label class="field">
+          <span class="label">分组名称</span>
+          <input id="new-group-name" class="input" placeholder="例如：技术博客" autocomplete="off" />
+        </label>
+        <div class="modal-err" id="newgroup-err"></div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn ghost" data-close="newgroup">取消</button>
+        <button class="btn primary" id="btn-create-group">新建</button>
       </div>
     </div>
   </div>
