@@ -51,6 +51,7 @@
     modalAdd: $('#modal-add'),
     modalManage: $('#modal-manage'),
     modalSettings: $('#modal-settings'),
+    modalFeed: $('#modal-feed'),
   };
 
   const DEFAULT_ICON = `<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M7.5 9.5h9M7.5 12.5h9M7.5 15.5h5"/></svg>`;
@@ -374,6 +375,8 @@
 
   function updateListTitle() {
     el.listTitle.textContent = scopeTitle();
+    const infoBtn = $('#btn-feed-info');
+    if (infoBtn) infoBtn.hidden = state.scope.type !== 'feed';
   }
 
   function updateSegbar() {
@@ -854,6 +857,67 @@
     }
   });
 
+  /* ------------------------- 订阅源信息面板 ------------------------- */
+
+  function openFeedInfo() {
+    if (state.scope.type !== 'feed') return;
+    const f = state.feeds.find((x) => x.id === state.scope.id);
+    if (!f) { toast('订阅源不存在'); return; }
+
+    $('#feed-name').value = f.title || '';
+    $('#feed-url').value = f.url || '';
+    $('#feed-group').innerHTML = `<option value="">不分组</option>` +
+      state.groups.map((g) => `<option value="${g.id}" ${f.group_id === g.id ? 'selected' : ''}>${escapeHtml(g.name)}</option>`).join('');
+
+    const status = f.last_status === 'error'
+      ? `<span class="err">抓取失败${f.last_error ? '：' + escapeHtml(f.last_error) : ''}</span>`
+      : (f.last_status === 'ok' ? '正常' : '—');
+    const site = f.site_url
+      ? `<a href="${escapeHtml(f.site_url)}" target="_blank" rel="noopener">${escapeHtml(f.site_url.replace(/^https?:\/\//, ''))}</a>`
+      : '—';
+
+    $('#feed-stats').innerHTML = `
+      <dt>文章</dt><dd>${f.total || 0} 篇（未读 ${f.unread || 0}）</dd>
+      <dt>最新一篇</dt><dd>${f.last_pub ? fmtFull(f.last_pub) : '—'}</dd>
+      <dt>最后抓取</dt><dd>${f.last_fetch_at ? fmtFull(f.last_fetch_at) : '—'}</dd>
+      <dt>状态</dt><dd>${status}</dd>
+      <dt>站点</dt><dd>${site}</dd>
+      <dt>添加时间</dt><dd>${f.created_at ? fmtFull(f.created_at) : '—'}</dd>`;
+    $('#feed-err').textContent = '';
+
+    el.modalFeed.hidden = false;
+    setTimeout(() => $('#feed-name').focus(), 90);
+  }
+
+  $('#btn-feed-info').addEventListener('click', openFeedInfo);
+
+  $('#btn-save-feed').addEventListener('click', async () => {
+    if (state.scope.type !== 'feed') return;
+    const name = $('#feed-name').value.trim();
+    const gid = $('#feed-group').value || null;
+    const btn = $('#btn-save-feed');
+    btn.disabled = true;
+    $('#feed-err').textContent = '';
+    try {
+      const r = await api(`/feeds/${state.scope.id}`, { method: 'PATCH', body: { title: name, groupId: gid } });
+      state.feeds = r.feeds || state.feeds;
+      state.groups = r.groups || state.groups;
+      renderSources();
+      updateListTitle();
+      await loadItems();
+      closeModal('feed');
+      toast('已保存');
+    } catch (err) {
+      $('#feed-err').textContent = err.message;
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  $('#feed-name').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') $('#btn-save-feed').click();
+  });
+
   /* ---------------------------- 下拉刷新 ---------------------------- */
 
   function setupPullToRefresh(scroller, ptrEl, onRefresh) {
@@ -986,7 +1050,7 @@
   applyTheme(localStorage.getItem('ant.theme') || 'light');
 
   /* ------------------------------ 弹层通用 ------------------------------ */
-  const modals = { add: el.modalAdd, manage: el.modalManage, settings: el.modalSettings };
+  const modals = { add: el.modalAdd, manage: el.modalManage, settings: el.modalSettings, feed: el.modalFeed };
   function closeModal(name) {
     if (modals[name]) modals[name].hidden = true;
   }

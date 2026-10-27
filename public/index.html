@@ -69,6 +69,9 @@
             <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>
           </button>
           <div class="list-title" id="list-title">全部文章</div>
+          <button class="icon-btn sm" id="btn-feed-info" title="订阅源信息" aria-label="订阅源信息" hidden>
+            <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.2"/><circle cx="12" cy="8" r="0.9" fill="currentColor" stroke="none"/></svg>
+          </button>
           <button class="icon-btn sm" id="btn-refresh" title="刷新" aria-label="刷新">
             <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2.3 6.7"/><path d="M20 5v6h-6"/></svg>
           </button>
@@ -203,9 +206,41 @@
     </div>
   </div>
 
+  <!-- ======================= 订阅源信息 ======================= -->
+  <div class="modal" id="modal-feed" hidden>
+    <div class="modal-mask" data-close="feed"></div>
+    <div class="modal-card">
+      <div class="modal-head">
+        <h3>订阅源信息</h3>
+        <button class="icon-btn sm" data-close="feed" aria-label="关闭">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <label class="field">
+          <span class="label">名称</span>
+          <input id="feed-name" class="input" placeholder="订阅名称" />
+        </label>
+        <label class="field">
+          <span class="label">分组</span>
+          <select id="feed-group" class="input"></select>
+        </label>
+        <div class="field">
+          <span class="label">订阅地址</span>
+          <input id="feed-url" class="input" readonly />
+        </div>
+        <div class="feed-stats" id="feed-stats"></div>
+        <div class="modal-err" id="feed-err"></div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn ghost" data-close="feed">取消</button>
+        <button class="btn primary" id="btn-save-feed">保存</button>
+      </div>
+    </div>
+  </div>
+
   <input type="file" id="opml-file" accept=".opml,.xml,text/xml" hidden />
   <div class="toast" id="toast" hidden></div>
-
   <script src="/app.js"></script>
 </body>
 </html>

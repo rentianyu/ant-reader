@@ -275,6 +275,40 @@ def main():
         check("桌面点击也原地展开", ev(ws, "!!document.querySelector('.item.expanded')"))
         shot(ws, "d1-two-col.png")
 
+        print("== 左栏宽度 + 订阅源信息面板 ==")
+        rail_w = ev(ws, "Math.round(document.querySelector('.pane-sources').getBoundingClientRect().width)")
+        check("左栏宽度 ≈ 402px", 390 <= (rail_w or 0) <= 415, f"{rail_w}px")
+        check("非订阅源时不显示信息按钮", ev(ws, "document.getElementById('btn-feed-info').hidden"))
+
+        ev(ws, "document.querySelector('.src-entry[data-scope=feed]').click()")
+        time.sleep(2.6)
+        check("选中订阅源后显示信息按钮", not ev(ws, "document.getElementById('btn-feed-info').hidden"))
+        ev(ws, "document.getElementById('btn-feed-info').click()")
+        time.sleep(0.8)
+        check("信息面板打开", not ev(ws, "document.getElementById('modal-feed').hidden"))
+        nm = ev(ws, "document.getElementById('feed-name').value")
+        check("名称已填充", bool(nm), str(nm))
+        dts = ev(ws, "document.querySelectorAll('#feed-stats dt').length")
+        check("统计项 ≥ 5", (dts or 0) >= 5, f"{dts} 项")
+        shot(ws, "d2-feed-info.png")
+
+        ev(ws, "document.getElementById('feed-name').value = '改名测试'")
+        ev(ws, "document.getElementById('btn-save-feed').click()")
+        time.sleep(2.6)
+        check("保存后关闭面板", ev(ws, "document.getElementById('modal-feed').hidden"))
+        lt = ev(ws, "document.querySelector('.list-title').textContent")
+        check("标题跟随新名称", lt == "改名测试", lt)
+        left_name = ev(ws, "document.querySelector('.src-entry.active .se-name').textContent")
+        check("左栏名称已更新", left_name == "改名测试", left_name)
+
+        # 还原原名
+        ev(ws, "document.getElementById('btn-feed-info').click()")
+        time.sleep(0.6)
+        ev(ws, "document.getElementById('feed-name').value = %s" % json.dumps(nm))
+        ev(ws, "document.getElementById('btn-save-feed').click()")
+        time.sleep(2.0)
+        check("还原成功", ev(ws, "document.querySelector('.list-title').textContent") == nm)
+
         print("== 全部已读时列表不空白 ==")
         # 用 API 把所有文章标为已读，模拟"读完一轮"
         req = urllib.request.Request(

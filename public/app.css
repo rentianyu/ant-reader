@@ -614,6 +614,23 @@ select.input { appearance: none; background-image: linear-gradient(45deg, transp
 .hint { font-size: 12.5px; color: var(--text-4); line-height: 1.7; }
 .modal-err { margin-top: 10px; font-size: 13px; color: var(--danger); min-height: 18px; line-height: 1.6; }
 
+/* 订阅源信息面板 */
+.feed-stats {
+  margin-top: 6px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px 16px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  align-items: baseline;
+}
+.feed-stats dt { color: var(--text-3); white-space: nowrap; }
+.feed-stats dd { margin: 0; color: var(--text-2); word-break: break-all; text-align: left; }
+.feed-stats dd a { color: var(--accent); text-decoration: none; }
+.feed-stats dd.err { color: var(--danger); }
+
 .add-preview {
   margin-top: 14px;
   padding: 12px 14px;
@@ -740,7 +757,7 @@ select.input { appearance: none; background-image: linear-gradient(45deg, transp
 @media (min-width: 900px) {
   .layout {
     display: grid;
-    grid-template-columns: 244px minmax(0, 1fr);
+    grid-template-columns: 366px minmax(0, 1fr);
     min-height: 0;
   }
 
@@ -794,7 +811,7 @@ select.input { appearance: none; background-image: linear-gradient(45deg, transp
 }
 
 @media (min-width: 1280px) {
-  .layout { grid-template-columns: 268px minmax(0, 1fr); }
+  .layout { grid-template-columns: 402px minmax(0, 1fr); }
   .item { padding: 7px 26px; }
   .it-title { font-size: 14px; }
   .it-more-html, .it-more-text { font-size: 13.5px; }
