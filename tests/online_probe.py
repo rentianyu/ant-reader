@@ -113,6 +113,20 @@ def main():
         print("已读分隔出现:", ev(ws, "!!document.querySelector('.seg-divider')"))
         print("列表总条数:", ev(ws, "document.querySelectorAll('.item').length"))
         shot(ws, "online-3-read-seg.png")
+
+        # 桌面两栏（只读：不点文章，不改数据）
+        cdp(ws, "Emulation.setDeviceMetricsOverride",
+            {"width": 1600, "height": 950, "deviceScaleFactor": 1, "mobile": False})
+        time.sleep(0.8)
+        ev(ws, "document.body.dataset.view = 'sources'")
+        time.sleep(0.4)
+        ev(ws, "document.querySelector('.src-entry[data-scope=all]').click()")
+        time.sleep(3)
+        print("桌面网格:", ev(ws, "getComputedStyle(document.querySelector('.layout')).gridTemplateColumns"))
+        print("桌面条目高:", ev(ws, "Math.round(document.querySelector('.item').getBoundingClientRect().height)"),
+              "标题字号:", ev(ws, "getComputedStyle(document.querySelector('.it-title')).fontSize"))
+        print("阅读栏:", ev(ws, "getComputedStyle(document.getElementById('pane-reader')).display"))
+        shot(ws, "online-4-desktop.png")
         ws.close()
     finally:
         chrome.terminate()
