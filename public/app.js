@@ -41,6 +41,8 @@
     ptr: $('#ptr'),
     listTitle: $('#list-title'),
     listMore: $('#list-more'),
+    btnMore: $('#btn-more'),
+    latestTip: $('#latest-tip'),
     readerBody: $('#reader-body'),
     readerScroll: $('#reader-scroll'),
     segbar: $('#segbar'),
@@ -555,7 +557,16 @@
     }
 
     el.itemContainer.innerHTML = out.join('');
-    el.listMore.hidden = !state.hasMore;
+    if (state.filter === 'all') {
+      // 时间正序列表：底部就是最新，没有「加载更多」，更早的靠向上滚动
+      el.listMore.hidden = false;
+      el.btnMore.hidden = true;
+      el.latestTip.hidden = false;
+    } else {
+      el.latestTip.hidden = true;
+      el.btnMore.hidden = false;
+      el.listMore.hidden = !state.hasMore;
+    }
   }
 
   function renderExpanded(it) {

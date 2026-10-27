@@ -328,6 +328,8 @@ def main():
         check("有文章", bool(pubs) and len(pubs) > 5, f"{len(pubs) if pubs else 0} 条")
         check("旧在上新在下（时间单调不减）", pubs == sorted(pubs),
               f"首 {pubs[0] if pubs else ''} / 末 {pubs[-1] if pubs else ''}")
+        check("底部是「已是最新」提示", ev(ws, "!document.getElementById('latest-tip').hidden"))
+        check("不显示「加载更多」按钮", ev(ws, "document.getElementById('btn-more').hidden"))
         bottom = ev(ws, "(() => { const b = document.getElementById('item-list'); return Math.round(b.scrollTop + b.clientHeight - b.scrollHeight); })()")
         check("打开即定位到最新（底部）", (bottom if bottom is not None else -99) >= -10, f"距底 {bottom}px")
         n1 = len(pubs or [])
