@@ -14,10 +14,11 @@ const MAX_CONTENT_CHARS = 200000;
 /** 每个源保留的历史条数上限 */
 const FEED_KEEP_ITEMS = 200;
 
+/** 读取响应体字节（不解码），上限 maxBytes */
 async function readLimited(res, maxBytes = MAX_BYTES) {
   const declared = parseInt(res.headers.get('content-length') || '0', 10);
   if (declared && declared > maxBytes) throw new Error(`响应过大（${Math.round(declared / 1024)}KB）`);
-  if (!res.body) return await res.text();
+  if (!res.body) return new Uint8Array(await res.arrayBuffer());
   const reader = res.body.getReader();
   const chunks = [];
   let size = 0;
@@ -34,7 +35,38 @@ async function readLimited(res, maxBytes = MAX_BYTES) {
   const buf = new Uint8Array(size);
   let off = 0;
   for (const c of chunks) { buf.set(c, off); off += c.byteLength; }
-  return new TextDecoder('utf-8').decode(buf);
+  return buf;
+}
+
+/**
+ * 探测编码：Content-Type → XML 声明 → HTML meta → 默认 UTF-8。
+ * 不少国内论坛（如 52pojie/Discuz）的 RSS 仍是 GBK，按 UTF-8 解码会全是乱码。
+ */
+function detectCharset(buf, contentType) {
+  const ct = String(contentType || '');
+  const m = /charset\s*=\s*["']?([\w.-]+)/i.exec(ct);
+  if (m) return m[1].toLowerCase();
+
+  const head = new TextDecoder('latin1').decode(buf.slice(0, 512));
+  const m2 = /<\?xml[^>]*encoding\s*=\s*["']([\w.-]+)["']/i.exec(head);
+  if (m2) return m2[1].toLowerCase();
+
+  const m3 = /<meta[^>]*charset\s*=\s*["']?([\w.-]+)/i.exec(head);
+  if (m3) return m3[1].toLowerCase();
+
+  return 'utf-8';
+}
+
+/** 按探测到的编码解码；GB2312/GBK 统一用超集 GB18030 */
+function decodeBody(buf, contentType) {
+  let cs = detectCharset(buf, contentType);
+  if (/^gb(2312|k|18030)$/i.test(cs)) cs = 'gb18030';
+  try {
+    return new TextDecoder(cs, { fatal: false }).decode(buf);
+  } catch {
+    try { return new TextDecoder('gb18030').decode(buf); } catch { /* 继续回退 */ }
+    return new TextDecoder('utf-8', { fatal: false }).decode(buf);
+  }
 }
 
 async function fetchOnce(url) {
@@ -86,7 +118,7 @@ export async function syncFeed(env, feed) {
     throw new Error(`HTTP ${res.status}`);
   }
 
-  const text = await readLimited(res);
+  const text = decodeBody(await readLimited(res), res.headers.get('content-type'));
   let parsed;
   try {
     parsed = parseFeed(text, feed.url);
@@ -126,6 +158,8 @@ export async function syncFeed(env, feed) {
 export async function resolveFeed(inputUrl) {
   let url = String(inputUrl || '').trim();
   if (!url) throw new Error('请输入订阅地址');
+  // OPML / 网页复制常带 HTML 实体，&amp; 会让 query 参数失效
+  url = url.replace(/&amp;/gi, '&').replace(/&#0*38;/g, '&').replace(/&quot;/gi, '"').trim();
   if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
 
   let parsedUrl;
@@ -140,7 +174,7 @@ export async function resolveFeed(inputUrl) {
   }
   if (!res.ok) throw new Error(`无法访问该地址：HTTP ${res.status}`);
 
-  const text = await readLimited(res);
+  const text = decodeBody(await readLimited(res), res.headers.get('content-type'));
   const contentType = (res.headers.get('content-type') || '').toLowerCase();
 
   // 1) 直接当 feed 解析
@@ -167,7 +201,7 @@ export async function resolveFeed(inputUrl) {
       const first = found[0];
       const r2 = await fetchOnce(first.url);
       if (r2.ok) {
-        const t2 = await readLimited(r2);
+        const t2 = decodeBody(await readLimited(r2), r2.headers.get('content-type'));
         try {
           const parsed = parseFeed(t2, first.url);
           return {

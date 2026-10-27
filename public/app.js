@@ -239,18 +239,24 @@
   }
 
   /* ------------------------------ 订阅源渲染 ------------------------------ */
+  /** 有未读的源排前面，其余按最近更新时间倒序 */
+  function sortFeeds(list) {
+    return [...list].sort((a, b) => {
+      const ua = (a.unread || 0) > 0 ? 0 : 1;
+      const ub = (b.unread || 0) > 0 ? 0 : 1;
+      if (ua !== ub) return ua - ub;
+      const ta = a.last_pub || a.last_fetch_at || 0;
+      const tb = b.last_pub || b.last_fetch_at || 0;
+      return tb - ta;
+    });
+  }
+
   function renderSources() {
     const parts = [];
 
-    const unread = state.counts.unread || 0;
     parts.push(srcEntryHtml({
       key: 'all', icon: ICONS.all, name: '全部文章', badge: null,
       active: state.scope.type === 'all' && state.filter !== 'starred',
-      time: '',
-    }));
-    parts.push(srcEntryHtml({
-      key: 'unread', icon: ICONS.unread, name: '未读', badge: unread || null,
-      active: state.scope.type === 'all' && state.filter === 'unread',
       time: '',
     }));
     parts.push(srcEntryHtml({
@@ -276,12 +282,12 @@
         <span class="src-group-count">${list.length}</span>
       </div>`);
       if (!state.collapsed.has(g.id)) {
-        for (const f of list) parts.push(feedEntryHtml(f));
+        for (const f of sortFeeds(list)) parts.push(feedEntryHtml(f));
       }
     }
     if (ungrouped.length) {
       if (state.groups.length) parts.push(`<div class="src-group"><span class="caret"></span><span class="src-group-name">未分组</span></div>`);
-      for (const f of ungrouped) parts.push(feedEntryHtml(f));
+      for (const f of sortFeeds(ungrouped)) parts.push(feedEntryHtml(f));
     }
 
     if (!state.feeds.length) {

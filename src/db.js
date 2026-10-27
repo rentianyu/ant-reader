@@ -106,9 +106,18 @@ export async function markFeedFetch(db, id, status, error) {
 export async function insertItems(db, feedId, items) {
   if (!items.length) return 0;
   const ts = now();
+  // 已存在则更新文本字段（源修正编码 / 改标题后能自愈），未读与收藏状态不动
   const stmts = items.map((it) => db.prepare(
-    `INSERT OR IGNORE INTO items (feed_id, guid, title, link, author, summary, content, published_at, fetched_at, is_read, is_starred)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0)`,
+    `INSERT INTO items (feed_id, guid, title, link, author, summary, content, published_at, fetched_at, is_read, is_starred)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0)
+     ON CONFLICT(feed_id, guid) DO UPDATE SET
+       title = excluded.title,
+       link = excluded.link,
+       author = excluded.author,
+       summary = excluded.summary,
+       content = excluded.content,
+       published_at = COALESCE(excluded.published_at, items.published_at)
+     WHERE items.title <> excluded.title OR items.content <> excluded.content`,
   ).bind(
     feedId, it.guid, it.title || '', it.link || '', it.author || '',
     it.summary || '', it.content || '', it.publishedAt || ts, ts,
