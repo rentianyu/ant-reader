@@ -412,7 +412,7 @@ def main():
         check("无「全部/未读/收藏」筛选条", ev(ws, "!document.getElementById('segbar')"))
         check("左栏无「全部文章」入口", ev(ws, "[...document.querySelectorAll('.src-entry')].every(e => !e.textContent.includes('全部文章'))"))
         check("顶部不再有「加载更久」栏", ev(ws, "!document.getElementById('load-older')"))
-        check("左栏有「收藏」入口", ev(ws, "[...document.querySelectorAll('.src-entry')].some(e => e.textContent.includes('收藏'))"))
+        check("左栏有「⭐️ 收藏」入口", ev(ws, "[...document.querySelectorAll('.src-entry')].some(e => e.textContent.includes('⭐️ 收藏'))"))
         shot(ws, "m10-unread-only.png")
 
         n1 = stat.get("n") or 0

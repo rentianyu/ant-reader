@@ -255,7 +255,7 @@
     const parts = [];
 
     parts.push(`<div class="src-entry ${state.scope.type === 'starred' ? 'active' : ''} ${state.counts.starred ? 'unread' : ''}" data-scope="starred">
-      <span class="se-name">收藏</span>
+      <span class="se-name">⭐️ 收藏</span>
       ${state.counts.starred ? `<span class="se-badge">${state.counts.starred > 99 ? '99+' : state.counts.starred}</span>` : ''}
       <span class="se-time"></span>
     </div>`);
