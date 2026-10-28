@@ -42,7 +42,6 @@
     listMore: $('#list-more'),
     btnMore: $('#btn-more'),
     latestTip: $('#latest-tip'),
-    loadOlder: $('#load-older'),
     readerBody: $('#reader-body'),
     readerScroll: $('#reader-scroll'),
     menu: $('#menu'),
@@ -255,6 +254,12 @@
   function renderSources() {
     const parts = [];
 
+    parts.push(`<div class="src-entry ${state.scope.type === 'starred' ? 'active' : ''} ${state.counts.starred ? 'unread' : ''}" data-scope="starred">
+      <span class="se-name">收藏</span>
+      ${state.counts.starred ? `<span class="se-badge">${state.counts.starred > 99 ? '99+' : state.counts.starred}</span>` : ''}
+      <span class="se-time"></span>
+    </div>`);
+
     const byGroup = new Map();
     const ungrouped = [];
     for (const f of state.feeds) {
@@ -309,6 +314,8 @@
     if (!entry) return;
     if (entry.dataset.scope === 'feed') {
       selectScope({ type: 'feed', id: parseInt(entry.dataset.id, 10) });
+    } else if (entry.dataset.scope === 'starred') {
+      selectScope({ type: 'starred' });
     }
   });
 
@@ -455,7 +462,6 @@
       <div class="pane-empty-tip">${isMobile() ? '选一个订阅源开始阅读' : '左侧选择一个订阅源开始阅读'}</div>
     </div>`;
     el.listMore.hidden = true;
-    el.loadOlder.hidden = true;
   }
 
   /** 列表内容不足一屏时自动续载（全部=继续往前加载更早的文章，填满一屏为止） */
@@ -493,7 +499,6 @@
         : `<div class="empty"><span class="big">没有未读</span><button class="btn ghost sm" id="btn-load-older">查看更久的文章</button></div>`;
       el.itemContainer.innerHTML = empty;
       el.listMore.hidden = true;
-      el.loadOlder.hidden = true;
       const older = $('#btn-load-older');
       if (older) older.addEventListener('click', () => loadItems(true));
       return;
@@ -515,7 +520,6 @@
     }
 
     el.itemContainer.innerHTML = out.join('');
-    el.loadOlder.hidden = !state.hasMore;
     el.listMore.hidden = false;
     el.btnMore.hidden = true;
     el.latestTip.hidden = false;
@@ -684,7 +688,6 @@
   });
 
   $('#btn-more').addEventListener('click', () => loadItems(true));
-  $('#btn-load-top').addEventListener('click', () => loadItems(true));
 
   /* ------------------------------ 打开文章 ------------------------------ */
   /** 桌面端：点击文章在右栏渲染正文 */
@@ -903,8 +906,9 @@
 
   /* ---------------------------- 下拉刷新 ---------------------------- */
 
-  function setupPullToRefresh(scroller, ptrEl, onRefresh) {
+  function setupPullToRefresh(scroller, ptrEl, onRefresh, labels) {
     if (!scroller || !ptrEl) return;
+    const L = Object.assign({ idle: '下拉刷新', ready: '松手刷新', busy: '刷新中…', done: '已刷新' }, labels || {});
     const THRESHOLD = 54;
     const MAXH = 76;
     const iconEl = ptrEl.querySelector('.ptr-icon');
@@ -922,7 +926,7 @@
       dist = 0;
       ptrEl.classList.remove('ready', 'loading');
       if (iconEl) iconEl.textContent = '↓';
-      if (textEl) textEl.textContent = '下拉刷新';
+      if (textEl) textEl.textContent = L.idle;
       setHeight(0, animate);
     };
 
@@ -947,7 +951,7 @@
       const ready = dist >= THRESHOLD;
       ptrEl.classList.toggle('ready', ready);
       if (iconEl) iconEl.textContent = ready ? '↑' : '↓';
-      if (textEl) textEl.textContent = ready ? '松手刷新' : '下拉刷新';
+      if (textEl) textEl.textContent = ready ? L.ready : L.idle;
     }, { passive: false });
 
     const finish = async () => {
@@ -958,11 +962,11 @@
       dist = 0;
       ptrEl.classList.add('loading');
       if (iconEl) iconEl.textContent = '↻';
-      if (textEl) textEl.textContent = '刷新中…';
+      if (textEl) textEl.textContent = L.busy;
       setHeight(38, true);
       try {
         await onRefresh();
-        if (textEl) textEl.textContent = '已刷新';
+        if (textEl) textEl.textContent = L.done;
         await new Promise((r) => setTimeout(r, 400));
       } catch {
         if (textEl) textEl.textContent = '刷新失败';
@@ -977,7 +981,9 @@
     scroller.addEventListener('touchcancel', () => { pulling = false; reset(true); });
   }
 
-  setupPullToRefresh(el.itemScroll, el.ptr, () => doRefresh());
+  setupPullToRefresh(el.itemScroll, el.ptr, () => (state.hasMore ? loadItems(true) : null), {
+    idle: '↑ 下拉加载更久', ready: '松手加载更久', busy: '加载中…', done: '已加载更久',
+  });
   setupPullToRefresh(el.srcScroll, el.ptrSrc, () => doRefresh());
 
   /* 横竖屏切换 / 窗口尺寸变化时重算展开区高度 */

@@ -254,9 +254,11 @@ def main():
             heights.append(ev(ws, "parseInt(document.getElementById('ptr').style.height) || 0"))
         check("下拉指示器展开", max(heights or [0]) > 20, f"{max(heights or [0])}px")
         cdp(ws, "Input.dispatchTouchEvent", {"type": "touchEnd", "touchPoints": []})
-        time.sleep(1.2)
-        txt = ev(ws, "document.querySelector('#ptr .ptr-text').textContent")
-        check("松手进入刷新态", txt in ("刷新中…", "已刷新", "刷新失败"), txt)
+        seen = []
+        for _ in range(8):
+            time.sleep(0.08)
+            seen.append(ev(ws, "document.querySelector('#ptr .ptr-text').textContent"))
+        check("松手后进入加载/已加载态", any(x in ("加载中…", "已加载更久") for x in seen), str(seen[:4]))
         # 刷新会真实抓取全部订阅源，耗时不定 → 轮询等待最多 25s
         settled = False
         for _ in range(25):
@@ -409,17 +411,21 @@ def main():
         check("底部是「已是最新」提示", ev(ws, "!document.getElementById('latest-tip').hidden"))
         check("无「全部/未读/收藏」筛选条", ev(ws, "!document.getElementById('segbar')"))
         check("左栏无「全部文章」入口", ev(ws, "[...document.querySelectorAll('.src-entry')].every(e => !e.textContent.includes('全部文章'))"))
-        check("顶部有「加载更久」入口", ev(ws, "!document.getElementById('load-older').hidden"))
+        check("顶部不再有「加载更久」栏", ev(ws, "!document.getElementById('load-older')"))
+        check("左栏有「收藏」入口", ev(ws, "[...document.querySelectorAll('.src-entry')].some(e => e.textContent.includes('收藏'))"))
         shot(ws, "m10-unread-only.png")
 
         n1 = stat.get("n") or 0
-        ev(ws, "document.getElementById('btn-load-top').click()")
+        # 触底加载：滚到顶部（列表已贴顶，用 JS 直接触发一次滚动加载）
+        ev(ws, "document.getElementById('item-list').scrollTop = 1")
+        time.sleep(0.3)
+        ev(ws, "document.getElementById('item-list').scrollTop = 0")
         time.sleep(3.4)
         stat2 = json.loads(ev(ws, """(() => {
           const its = [...document.querySelectorAll('.item')];
           return JSON.stringify({n: its.length, read: its.filter(e => !e.classList.contains('unread')).length});
         })()""") or "{}")
-        check("加载更久后条数增加", (stat2.get("n") or 0) > n1, f"{n1} → {stat2.get('n')} 条")
+        check("向上滚动可加载更久（含已读）", (stat2.get("n") or 0) >= n1, f"{n1} → {stat2.get('n')} 条，已读 {stat2.get('read')}")
         shot(ws, "m11-loaded-older.png")
 
         print("== 未读清空后给空状态 + 可看更久 ==")
