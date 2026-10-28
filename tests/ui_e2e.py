@@ -428,6 +428,37 @@ def main():
         check("向上滚动可加载更久（含已读）", (stat2.get("n") or 0) >= n1, f"{n1} → {stat2.get('n')} 条，已读 {stat2.get('read')}")
         shot(ws, "m11-loaded-older.png")
 
+        print("== 收藏视图 ==")
+        # 先收藏一篇文章（走 API，避免依赖 UI 操作）
+        items = json.loads(urllib.request.urlopen(urllib.request.Request(
+            base + "/api/items?limit=1", headers={"cookie": f"ant_session={token}",
+            "user-agent": "Mozilla/5.0 Chrome/140.0"})).read())["items"]
+        star_id = items[0]["id"] if items else None
+        if star_id:
+            req = urllib.request.Request(
+                base + f"/api/items/{star_id}", data=json.dumps({"starred": True}).encode(), method="PATCH",
+                headers={"content-type": "application/json", "cookie": f"ant_session={token}",
+                         "user-agent": "Mozilla/5.0 Chrome/140.0"})
+            urllib.request.urlopen(req, timeout=30).read()
+        ev(ws, "window.__err = null; window.addEventListener('error', e => { window.__err = e.message; })")
+        ev(ws, "document.body.dataset.view = 'sources'")
+        time.sleep(0.4)
+        ev(ws, "document.querySelector('.src-entry[data-scope=starred]').click()")
+        time.sleep(2.8)
+        check("收藏视图无 JS 报错", ev(ws, "window.__err") is None, str(ev(ws, "window.__err")))
+        check("收藏视图标题为「收藏」", ev(ws, "document.querySelector('.list-title').textContent") == "收藏")
+        n_star = ev(ws, "document.querySelectorAll('.item').length")
+        check("收藏列表有文章", (n_star or 0) > 0, f"{n_star} 条")
+        bottom = ev(ws, "(() => { const b = document.getElementById('item-list'); return Math.round(b.scrollTop + b.clientHeight - b.scrollHeight); })()")
+        check("收藏视图定位到底部", (bottom if bottom is not None else -99) >= -10, f"距底 {bottom}px")
+        shot(ws, "m13-starred.png")
+        if star_id:
+            req = urllib.request.Request(
+                base + f"/api/items/{star_id}", data=json.dumps({"starred": False}).encode(), method="PATCH",
+                headers={"content-type": "application/json", "cookie": f"ant_session={token}",
+                         "user-agent": "Mozilla/5.0 Chrome/140.0"})
+            urllib.request.urlopen(req, timeout=30).read()
+
         print("== 未读清空后给空状态 + 可看更久 ==")
         req = urllib.request.Request(
             base + "/api/read-all", data=b"{}", method="POST",

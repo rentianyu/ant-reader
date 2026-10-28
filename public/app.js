@@ -371,6 +371,14 @@
    */
   let suppressScrollLoad = 0;
 
+  /** 收藏视图按时间正序展示，打开时落到底部（最新一条） */
+  function scrollItemsToBottom() {
+    requestAnimationFrame(() => {
+      const box = el.itemScroll;
+      box.scrollTop = box.scrollHeight;
+    });
+  }
+
   function scrollToFirstUnread() {
     const box = el.itemScroll;
     const place = () => {
