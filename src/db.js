@@ -127,7 +127,7 @@ export async function insertItems(db, feedId, items) {
 }
 
 export async function listItems(db, opts = {}) {
-  const { feedId, groupId, unreadOnly, readOnly, starredOnly, limit = 40, offset = 0, q, order = 'asc' } = opts;
+  const { feedId, groupId, unreadOnly, readOnly, starredOnly, limit = 40, offset = 0, q, order = 'asc', before = null } = opts;
   const where = [];
   const binds = [];
   if (feedId) { where.push('i.feed_id = ?'); binds.push(feedId); }
@@ -135,6 +135,8 @@ export async function listItems(db, opts = {}) {
   if (unreadOnly) where.push('i.is_read = 0');
   if (readOnly) where.push('i.is_read = 1');
   if (starredOnly) where.push('i.is_starred = 1');
+  // before：只要比这个时间戳更早的文章（用于「下拉看更久的」）
+  if (before) { where.push('COALESCE(i.published_at, i.fetched_at) < ?'); binds.push(before); }
   if (q) { where.push('(i.title LIKE ? OR i.summary LIKE ?)'); binds.push(`%${q}%`, `%${q}%`); }
 
   const dir = order === 'desc' ? 'DESC' : 'ASC';

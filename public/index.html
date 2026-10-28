@@ -76,18 +76,16 @@
             <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2.3 6.7"/><path d="M20 5v6h-6"/></svg>
           </button>
         </div>
-        <div class="segbar" id="segbar">
-          <button class="seg-item on" data-filter="all">全部</button>
-          <button class="seg-item" data-filter="unread">未读</button>
-          <button class="seg-item" data-filter="starred">收藏</button>
-        </div>
         <div class="item-scroll" id="item-list">
           <div class="ptr" id="ptr"><span class="ptr-icon">↓</span><span class="ptr-text">下拉刷新</span></div>
+          <div class="load-older" id="load-older" hidden>
+            <button class="load-older-btn" id="btn-load-top">↑ 加载更久的文章</button>
+          </div>
           <div id="item-container"></div>
         </div>
         <div class="list-more" id="list-more" hidden>
           <button class="btn ghost block" id="btn-more">加载更多</button>
-          <div class="latest-tip" id="latest-tip" hidden>— 已是最新一篇 · 向上滚动看更早 —</div>
+          <div class="latest-tip" id="latest-tip" hidden>— 已是最新 · 向上滚动看更久 —</div>
         </div>
       </section>
 

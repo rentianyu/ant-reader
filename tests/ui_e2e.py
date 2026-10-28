@@ -151,7 +151,7 @@ def main():
         ts0 = [i["published_at"] or i["fetched_at"] for i in d0["items"]]
         check("接口按时间升序（旧→新）", ts0 == sorted(ts0), f"{len(ts0)} 条")
 
-        ev(ws, "document.querySelector('.src-entry[data-scope=all]').click()")
+        ev(ws, "document.querySelector('.src-entry[data-scope=feed]').click()")
         time.sleep(2.4)
         check("进入文章列表", ev(ws, "document.body.dataset.view") == "list")
         metric = ev(ws, """(() => {
@@ -241,10 +241,9 @@ def main():
         check("再点打开原文", isinstance(opened, list) and len(opened) == 1, str(opened)[:70])
 
         print("== 下拉刷新 ==")
-        # 「全部」列表打开即位于底部、且滚到顶会自动前插历史，手势很难停在顶部，
-        # 故改用「未读」视图（单向向下加载）验证下拉刷新链路。
-        ev(ws, "document.querySelector('.seg-item[data-filter=unread]').click()")
-        time.sleep(2.6)
+        # 先重载当前源，收起上一段展开的卡片，避免内部滚动容器拦截手势
+        ev(ws, "document.querySelector('.src-entry.active').click()")
+        time.sleep(2.8)
         ev(ws, "document.getElementById('item-list').scrollTop = 0")
         time.sleep(0.5)
         cdp(ws, "Input.dispatchTouchEvent", {"type": "touchStart", "touchPoints": [{"x": 195, "y": 380}]})
@@ -272,7 +271,7 @@ def main():
         cdp(ws, "Emulation.setDeviceMetricsOverride",
             {"width": 1440, "height": 900, "deviceScaleFactor": 1, "mobile": False})
         time.sleep(0.8)
-        ev(ws, "document.querySelector('.src-entry[data-scope=all]').click()")
+        ev(ws, "document.querySelector('.src-entry[data-scope=feed]').click()")
         time.sleep(2.6)
         cols = ev(ws, "getComputedStyle(document.querySelector('.layout')).gridTemplateColumns")
         check("桌面是两栏", len(cols.split()) == 2, cols)
@@ -292,7 +291,6 @@ def main():
         print("== 左栏宽度 + 订阅源信息面板 ==")
         rail_w = ev(ws, "Math.round(document.querySelector('.pane-sources').getBoundingClientRect().width)")
         check("左栏宽度 ≈ 402px", 390 <= (rail_w or 0) <= 415, f"{rail_w}px")
-        check("非订阅源时不显示信息按钮", ev(ws, "document.getElementById('btn-feed-info').hidden"))
 
         ev(ws, "document.querySelector('.src-entry[data-scope=feed]').click()")
         time.sleep(2.6)
@@ -387,57 +385,65 @@ def main():
         ev(ws, "document.querySelector('#modal-feed [data-close=feed]').click()")
         time.sleep(0.5)
 
-        print("== 全部：时间正序 + 未读定位 + 向上加载 ==")
+        print("== 默认只看未读 + 加载更久 ==")
         ev(ws, "document.body.dataset.view = 'sources'")
         time.sleep(0.4)
-        ev(ws, "document.querySelector('.src-entry[data-scope=all]').click()")
+        ev(ws, "document.querySelector('.src-entry[data-scope=feed]').click()")
         time.sleep(3.8)
-        pubs = ev(ws, "[...document.querySelectorAll('.item')].map(e => e.dataset.pub).filter(Boolean)")
-        check("有文章", bool(pubs) and len(pubs) > 5, f"{len(pubs) if pubs else 0} 条")
-        check("旧在上新在下（时间单调不减）", pubs == sorted(pubs),
-              f"首 {pubs[0] if pubs else ''} / 末 {pubs[-1] if pubs else ''}")
-        check("底部是「已是最新」提示", ev(ws, "!document.getElementById('latest-tip').hidden"))
-        check("不显示「加载更多」按钮", ev(ws, "document.getElementById('btn-more').hidden"))
-        pos = ev(ws, """(() => {
+        stat = json.loads(ev(ws, """(() => {
+          const its = [...document.querySelectorAll('.item')];
           const box = document.getElementById('item-list');
           const un = document.querySelector('.item.unread');
-          const bt = box.getBoundingClientRect().top;
-          if (un) return {mode: 'unread', offset: Math.round(un.getBoundingClientRect().top - bt)};
-          return {mode: 'bottom', offset: Math.round(box.scrollTop + box.clientHeight - box.scrollHeight)};
-        })()""")
-        if pos and pos["mode"] == "unread":
-            check("最旧未读定位在屏幕上方", -6 <= pos["offset"] <= 26, f"距顶 {pos['offset']}px")
-        else:
-            check("无未读时定位到底部", (pos or {}).get("offset", -99) >= -10, f"距底 {pos and pos['offset']}px")
-        n1 = len(pubs or [])
-        ev(ws, "document.getElementById('item-list').scrollTop = 0")
-        time.sleep(3.6)
-        pubs2 = ev(ws, "[...document.querySelectorAll('.item')].map(e => e.dataset.pub).filter(Boolean)")
-        check("向上滚加载了更早的文章", len(pubs2 or []) > n1, f"{n1} → {len(pubs2 or [])} 条")
-        check("补充后仍单调不减", pubs2 == sorted(pubs2))
-        if pubs and pubs2:
-            check("补进来的是更早的", pubs2[0] <= pubs[0], f"{pubs2[0]} ≤ {pubs[0]}")
-        anchor = ev(ws, "Math.round(document.getElementById('item-list').scrollTop)")
-        check("滚动位置未被重置到顶部", (anchor or 0) > 0, f"scrollTop={anchor}")
-        shot(ws, "m6-upward-load.png")
+          return JSON.stringify({
+            n: its.length,
+            read: its.filter(e => !e.classList.contains('unread')).length,
+            pubs: its.map(e => e.dataset.pub).filter(Boolean),
+            unTop: un ? Math.round(un.getBoundingClientRect().top - box.getBoundingClientRect().top) : null,
+          });
+        })()""") or "{}")
+        check("有文章", (stat.get("n") or 0) > 3, f"{stat.get('n')} 条")
+        check("默认列表只有未读", stat.get("read") == 0, f"已读 {stat.get('read')} 条")
+        check("旧在上新在下", stat.get("pubs") == sorted(stat.get("pubs") or []))
+        ut = stat.get("unTop")
+        check("最旧未读贴在屏幕上方", ut is not None and -6 <= ut <= 60, f"距顶 {ut}px")
+        check("底部是「已是最新」提示", ev(ws, "!document.getElementById('latest-tip').hidden"))
+        check("无「全部/未读/收藏」筛选条", ev(ws, "!document.getElementById('segbar')"))
+        check("左栏无「全部文章」入口", ev(ws, "[...document.querySelectorAll('.src-entry')].every(e => !e.textContent.includes('全部文章'))"))
+        check("顶部有「加载更久」入口", ev(ws, "!document.getElementById('load-older').hidden"))
+        shot(ws, "m10-unread-only.png")
 
-        print("== 全部已读时列表不空白 ==")
-        # 用 API 把所有文章标为已读，模拟"读完一轮"
+        n1 = stat.get("n") or 0
+        ev(ws, "document.getElementById('btn-load-top').click()")
+        time.sleep(3.4)
+        stat2 = json.loads(ev(ws, """(() => {
+          const its = [...document.querySelectorAll('.item')];
+          return JSON.stringify({n: its.length, read: its.filter(e => !e.classList.contains('unread')).length});
+        })()""") or "{}")
+        check("加载更久后条数增加", (stat2.get("n") or 0) > n1, f"{n1} → {stat2.get('n')} 条")
+        shot(ws, "m11-loaded-older.png")
+
+        print("== 未读清空后给空状态 + 可看更久 ==")
         req = urllib.request.Request(
             base + "/api/read-all", data=b"{}", method="POST",
             headers={"content-type": "application/json", "cookie": f"ant_session={token}",
                      "user-agent": "Mozilla/5.0 Chrome/140.0 Safari/537.36"})
         urllib.request.urlopen(req, timeout=60).read()
-
         ev(ws, "document.body.dataset.view = 'sources'")
         cdp(ws, "Emulation.setDeviceMetricsOverride",
             {"width": 390, "height": 844, "deviceScaleFactor": 2, "mobile": True})
         time.sleep(0.5)
-        ev(ws, "document.querySelector('.src-entry[data-scope=all]').click()")
+        ev(ws, "document.querySelector('.src-entry[data-scope=feed]').click()")
         time.sleep(3.2)
-        n_all = ev(ws, "document.querySelectorAll('.item').length")
-        check("全已读时列表仍显示历史文章", (n_all or 0) > 0, f"{n_all} 条")
-        shot(ws, "m5-all-read.png")
+        check("未读为空时给空状态", ev(ws, "!!document.querySelector('.empty .big')"))
+        big = ev(ws, "document.querySelector('.empty .big').textContent")
+        check("空状态文案为「没有未读」", "没有未读" in (big or ""), big)
+        check("提供「查看更久的文章」入口", ev(ws, "!!document.getElementById('btn-load-older')"))
+        shot(ws, "m5-no-unread.png")
+        ev(ws, "document.getElementById('btn-load-older').click()")
+        time.sleep(3.2)
+        n_hist = ev(ws, "document.querySelectorAll('.item').length")
+        check("点后可看到历史文章", (n_hist or 0) > 0, f"{n_hist} 条")
+        shot(ws, "m12-history.png")
 
         ws.close()
     finally:

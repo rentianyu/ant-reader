@@ -10,8 +10,7 @@
     feeds: [],
     counts: { unread: 0, starred: 0, feeds: 0, items: 0 },
     settings: {},
-    scope: { type: 'all', id: null },
-    filter: 'all',
+    scope: { type: null, id: null },
     items: [],
     total: 0,
     current: null,
@@ -43,9 +42,9 @@
     listMore: $('#list-more'),
     btnMore: $('#btn-more'),
     latestTip: $('#latest-tip'),
+    loadOlder: $('#load-older'),
     readerBody: $('#reader-body'),
     readerScroll: $('#reader-scroll'),
-    segbar: $('#segbar'),
     menu: $('#menu'),
     toast: $('#toast'),
     modalAdd: $('#modal-add'),
@@ -237,7 +236,7 @@
     state.counts = data.counts || state.counts;
     state.settings = data.settings || state.settings;
     renderSources();
-    await selectScope({ type: 'all' }, { silent: true, keepView: true });
+    await selectScope({ type: null }, { silent: true, keepView: true });
   }
 
   /* ------------------------------ 订阅源渲染 ------------------------------ */
@@ -255,17 +254,6 @@
 
   function renderSources() {
     const parts = [];
-
-    parts.push(srcEntryHtml({
-      key: 'all', icon: ICONS.all, name: '全部文章', badge: null,
-      active: state.scope.type === 'all' && state.filter !== 'starred',
-      time: '',
-    }));
-    parts.push(srcEntryHtml({
-      key: 'starred', icon: ICONS.star, name: '收藏', badge: state.counts.starred || null,
-      active: state.scope.type === 'all' && state.filter === 'starred',
-      time: '',
-    }));
 
     const byGroup = new Map();
     const ungrouped = [];
@@ -299,19 +287,9 @@
     el.srcContainer.innerHTML = parts.join('');
   }
 
-  function srcEntryHtml({ key, icon, name, badge, active, time }) {
-    return `<div class="src-entry ${active ? 'active' : ''} ${badge ? 'unread' : ''}" data-scope="${key}">
-      <span class="se-icon">${icon}</span>
-      <span class="se-name">${escapeHtml(name)}</span>
-      ${badge ? `<span class="se-badge">${badge > 99 ? '99+' : badge}</span>` : ''}
-      <span class="se-time">${time || ''}</span>
-    </div>`;
-  }
-
   function feedEntryHtml(f) {
     const active = state.scope.type === 'feed' && state.scope.id === f.id;
     return `<div class="src-entry ${active ? 'active' : ''} ${f.unread ? 'unread' : ''}" data-scope="feed" data-id="${f.id}">
-      <span class="se-icon">${DEFAULT_ICON}</span>
       <span class="se-name">${escapeHtml(f.title || f.url)}</span>
       ${f.unread ? `<span class="se-badge">${f.unread > 99 ? '99+' : f.unread}</span>` : ''}
       <span class="se-time">${fmtTime(f.last_pub || f.last_fetch_at)}</span>
@@ -329,28 +307,16 @@
     }
     const entry = e.target.closest('.src-entry');
     if (!entry) return;
-    const scope = entry.dataset.scope;
-    if (scope === 'feed') {
+    if (entry.dataset.scope === 'feed') {
       selectScope({ type: 'feed', id: parseInt(entry.dataset.id, 10) });
-    } else if (scope === 'unread') {
-      state.filter = 'unread';
-      selectScope({ type: 'all' });
-    } else if (scope === 'starred') {
-      state.filter = 'starred';
-      selectScope({ type: 'all' });
-    } else {
-      state.filter = 'all';
-      selectScope({ type: 'all' });
     }
   });
 
   /* ------------------------------ 选择范围 ------------------------------ */
   async function selectScope(scope, opts = {}) {
     state.scope = scope;
-    if (!opts.keepFilter && scope.type !== 'all') state.filter = 'all';
     renderSources();
     updateListTitle();
-    updateSegbar();
     if (!opts.silent) {
       state.current = null;
       el.readerBody.innerHTML = `<div class="empty">选择一篇文章开始阅读</div>`;
@@ -360,7 +326,7 @@
   }
 
   function scopeTitle() {
-    const { scope, filter } = state;
+    const { scope } = state;
     if (scope.type === 'feed') {
       const f = state.feeds.find((x) => x.id === scope.id);
       return f ? (f.title || f.url) : '订阅';
@@ -369,9 +335,8 @@
       const g = state.groups.find((x) => x.id === scope.id);
       return g ? g.name : '分组';
     }
-    if (filter === 'unread') return '未读';
-    if (filter === 'starred') return '收藏';
-    return '全部文章';
+    if (scope.type === 'starred') return '收藏';
+    return '';
   }
 
   function updateListTitle() {
@@ -379,22 +344,6 @@
     const infoBtn = $('#btn-feed-info');
     if (infoBtn) infoBtn.hidden = state.scope.type !== 'feed';
   }
-
-  function updateSegbar() {
-    el.segbar.querySelectorAll('.seg-item').forEach((b) => {
-      b.classList.toggle('on', b.dataset.filter === state.filter);
-    });
-  }
-
-  el.segbar.addEventListener('click', (e) => {
-    const btn = e.target.closest('.seg-item');
-    if (!btn) return;
-    state.filter = btn.dataset.filter;
-    updateSegbar();
-    renderSources();
-    updateListTitle();
-    loadItems();
-  });
 
   /* ------------------------------ 文章列表 ------------------------------ */
 
@@ -436,13 +385,14 @@
   }
 
   /**
-   * 加载文章。
-   * 「全部」：纯时间序，旧的在上、新的在下。首屏取最新一页（desc 取回后反转），打开即滚到底部；
-   *          向上滚到接近顶部时再取更早的一页，插到列表前面并保持当前可视位置。
-   * 「未读」「收藏」：正序分页，向下滚到底追加。
+   * 加载文章（时间正序：旧在上、新在下）。
+   * 默认只取「未读」的最新一页，打开时把最旧的一条未读贴顶；
+   * 向上滚到顶部再按 before（时间游标）取更早的文章——那部分通常已是已读，
+   * 这就是「往下拉才看到更久的文章」。收藏视图同理。
    */
   async function loadItems(more = false) {
     if (state.loading) return;
+    if (!state.scope.type) { renderEmptyPane(); return; }
     state.loading = true;
     try {
       if (!more) {
@@ -451,59 +401,42 @@
         state.hasMore = true;
         state.loadedCount = 0;
 
-        if (state.filter === 'all') {
-          const p = buildParams({ offset: 0 });
-          p.set('order', 'desc');
-          const data = await api(`/items?${p.toString()}`);
-          state.items = data.items.slice().reverse();
-          state.total = data.total;
-          state.loadedCount = data.items.length;
-          state.hasMore = state.loadedCount < state.total;
-          renderItems();
-          scrollToFirstUnread();
-          return;
-        }
-
         const p = buildParams({ offset: 0 });
-        if (state.filter === 'unread') p.set('unread', '1');
-        if (state.filter === 'starred') p.set('starred', '1');
+        p.set('order', 'desc');
+        if (state.scope.type === 'starred') p.set('starred', '1');
+        else p.set('unread', '1');
         const data = await api(`/items?${p.toString()}`);
-        state.items = data.items;
+        state.items = data.items.slice().reverse();
         state.total = data.total;
-        state.hasMore = data.items.length < data.total;
+        state.loadedCount = data.items.length;
+        state.hasMore = state.scope.type === 'starred'
+          ? state.loadedCount < state.total
+          : true;
         renderItems();
+        if (state.scope.type === 'starred') scrollItemsToBottom();
+        else scrollToFirstUnread();
         return;
       }
 
-      if (state.filter !== 'all') {
-        if (!state.hasMore) return;
-        const p = buildParams({ offset: state.items.length });
-        if (state.filter === 'unread') p.set('unread', '1');
-        if (state.filter === 'starred') p.set('starred', '1');
-        const data = await api(`/items?${p.toString()}`);
-        state.items = state.items.concat(data.items);
-        state.total = data.total;
-        state.hasMore = state.items.length < data.total;
-        renderItems();
-        return;
-      }
-
-      // 「全部」：向前加载更早的文章
       if (!state.hasMore) return;
-      const p = buildParams({ offset: state.loadedCount });
+      const oldest = state.items[0];
+      const beforeTs = oldest ? (oldest.published_at || oldest.fetched_at) : null;
+      if (oldest && !beforeTs) { state.hasMore = false; return; }
+
+      const p = buildParams({ offset: 0 });
       p.set('order', 'desc');
+      if (beforeTs) p.set('before', String(beforeTs));
+      if (state.scope.type === 'starred') p.set('starred', '1');
       const data = await api(`/items?${p.toString()}`);
-      if (!data.items.length) {
-        state.hasMore = false;
-        return;
-      }
+      if (!data.items.length) { state.hasMore = false; renderItems(); return; }
+
       const older = data.items.slice().reverse();
       const box = el.itemScroll;
       const prevH = box.scrollHeight;
       const prevTop = box.scrollTop;
       state.items = older.concat(state.items);
       state.loadedCount += data.items.length;
-      state.hasMore = state.loadedCount < state.total;
+      state.hasMore = data.items.length === PAGE_SIZE;
       renderItems();
       box.scrollTop = prevTop + (box.scrollHeight - prevH);
     } catch (err) {
@@ -514,11 +447,22 @@
     }
   }
 
+  /** 未选订阅源时的占位（桌面大水印） */
+  function renderEmptyPane() {
+    state.items = [];
+    el.itemContainer.innerHTML = `<div class="pane-empty">
+      <div class="pane-empty-mark">蚁读</div>
+      <div class="pane-empty-tip">${isMobile() ? '选一个订阅源开始阅读' : '左侧选择一个订阅源开始阅读'}</div>
+    </div>`;
+    el.listMore.hidden = true;
+    el.loadOlder.hidden = true;
+  }
+
   /** 列表内容不足一屏时自动续载（全部=继续往前加载更早的文章，填满一屏为止） */
   let autoLoadDepth = 0;
   function maybeAutoLoad() {
-    // 时间序列表（全部）：首屏定位到最旧未读，不再自动向前补历史，避免刚打开就往前翻
-    if (state.filter === 'all') return;
+    // 默认只看未读：不自动向前补历史，避免一进列表就把已读带出来
+    return;
     if (state.loading || !state.hasMore) return;
     if (autoLoadDepth > 10) return;
     const box = el.itemScroll;
@@ -535,11 +479,7 @@
   el.itemScroll.addEventListener('scroll', () => {
     if (scrollLock || state.loading || Date.now() < suppressScrollLoad) return;
     const { scrollTop, clientHeight, scrollHeight } = el.itemScroll;
-    if (state.filter === 'all') {
-      if (scrollTop > 260) return;
-    } else if (scrollTop + clientHeight < scrollHeight - 240) {
-      return;
-    }
+    if (scrollTop > 260) return;
     scrollLock = true;
     loadItems(true).finally(() => {
       setTimeout(() => { scrollLock = false; }, 450);
@@ -548,14 +488,18 @@
 
   function renderItems() {
     if (!state.items.length) {
-      el.itemContainer.innerHTML = `<div class="empty"><span class="big">这里没有文章</span>${state.filter === 'unread' ? '所有文章都读完了' : '换个筛选条件或刷新试试'}</div>`;
+      const empty = state.scope.type === 'starred'
+        ? `<div class="empty"><span class="big">还没有收藏</span>在文章底部点「收藏」就会出现在这里</div>`
+        : `<div class="empty"><span class="big">没有未读</span><button class="btn ghost sm" id="btn-load-older">查看更久的文章</button></div>`;
+      el.itemContainer.innerHTML = empty;
       el.listMore.hidden = true;
+      el.loadOlder.hidden = true;
+      const older = $('#btn-load-older');
+      if (older) older.addEventListener('click', () => loadItems(true));
       return;
     }
 
-    const showFeedMini = state.scope.type !== 'feed';
     const out = [];
-
     for (const it of state.items) {
       const active = state.current && state.current.id === it.id;
       const expanded = state.expandedId === it.id;
@@ -564,30 +508,17 @@
           <div class="it-title">${escapeHtml(it.title || '(无标题)')}</div>
           <div class="it-side">
             <span class="it-time">${fmtTime(it.published_at || it.fetched_at)}</span>
-            <span class="it-feed-mini ${showFeedMini ? 'show' : ''}">${escapeHtml(it.feed_title || '')}</span>
           </div>
         </div>
-        <div class="it-meta">
-          <span class="it-feed">${escapeHtml(it.feed_title || '')}</span>
-          ${it.author ? `<span class="sep">·</span><span>${escapeHtml(it.author)}</span>` : ''}
-          ${it.is_starred ? `<span class="it-star">${STAR_SVG}</span>` : ''}
-        </div>
-        ${it.summary ? `<div class="it-summary">${escapeHtml(cleanText(it.summary))}</div>` : ''}
         ${expanded ? renderExpanded(it) : ''}
       </div>`);
     }
 
     el.itemContainer.innerHTML = out.join('');
-    if (state.filter === 'all') {
-      // 时间正序列表：底部就是最新，没有「加载更多」，更早的靠向上滚动
-      el.listMore.hidden = false;
-      el.btnMore.hidden = true;
-      el.latestTip.hidden = false;
-    } else {
-      el.latestTip.hidden = true;
-      el.btnMore.hidden = false;
-      el.listMore.hidden = !state.hasMore;
-    }
+    el.loadOlder.hidden = !state.hasMore;
+    el.listMore.hidden = false;
+    el.btnMore.hidden = true;
+    el.latestTip.hidden = false;
   }
 
   function renderExpanded(it) {
@@ -753,6 +684,7 @@
   });
 
   $('#btn-more').addEventListener('click', () => loadItems(true));
+  $('#btn-load-top').addEventListener('click', () => loadItems(true));
 
   /* ------------------------------ 打开文章 ------------------------------ */
   /** 桌面端：点击文章在右栏渲染正文 */
@@ -850,9 +782,12 @@
 
   /* ------------------------------ 顶栏操作 ------------------------------ */
   $('#btn-markall').addEventListener('click', async () => {
+    if (!state.scope.type) { toast('先选一个订阅源'); return; }
+    if (state.scope.type === 'starred') { toast('收藏视图不需要标记已读'); return; }
     try {
       const body = {};
       if (state.scope.type === 'feed') body.feedId = state.scope.id;
+      else if (state.scope.type === 'group') body.groupId = state.scope.id;
       const r = await api('/read-all', { method: 'POST', body });
       await refreshCounts();
       await loadItems();
@@ -958,7 +893,7 @@
       state.feeds = r.feeds;
       state.groups = r.groups;
       closeModal('feed');
-      await selectScope({ type: 'all' });
+      await selectScope({ type: null });
       renderManage(); renderSources(); fillGroupSelect();
       toast('已删除订阅');
     } catch (err) {
@@ -1070,8 +1005,7 @@
     try {
       if (act === 'manage') openManage();
       else if (act === 'starred') {
-        state.filter = 'starred';
-        await selectScope({ type: 'all' });
+        await selectScope({ type: 'starred' });
       } else if (act === 'opml-export') window.location.href = '/api/opml';
       else if (act === 'opml-import') $('#opml-file').click();
       else if (act === 'refresh') $('#btn-refresh').click();
@@ -1144,7 +1078,7 @@
       renderSources();
       closeModal('add');
       await refreshCounts();
-      if (state.scope.type === 'all') await loadItems();
+      if (state.scope.type) await loadItems();
       toast(`已添加「${r.feed.title || r.feed.url}」，抓取 ${r.synced.added} 篇`, 2800);
     } catch (err) {
       $('#add-err').textContent = err.message;
@@ -1246,7 +1180,7 @@
         const r = await api(`/feeds/${id}`, { method: 'DELETE' });
         state.feeds = r.feeds;
         state.groups = r.groups;
-        if (state.scope.type === 'feed' && state.scope.id === id) await selectScope({ type: 'all' });
+        if (state.scope.type === 'feed' && state.scope.id === id) await selectScope({ type: null });
         renderManage(); renderSources(); fillGroupSelect();
         toast('已删除');
       } catch (err) { toast(err.message); }

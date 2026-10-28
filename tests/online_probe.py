@@ -90,7 +90,7 @@ def main():
               "高度:", ev(ws, "Math.round(document.querySelector('.src-entry')?.getBoundingClientRect().height || 0)"), "px")
         shot(ws, "online-1-sources.png")
 
-        ev(ws, "document.querySelector('.src-entry[data-scope=all]').click()")
+        ev(ws, "document.querySelector('.src-entry[data-scope=feed]').click()")
         time.sleep(3)
         metric = ev(ws, """(() => {
           const items = [...document.querySelectorAll('.item')];
@@ -140,7 +140,7 @@ def main():
         time.sleep(0.8)
         ev(ws, "document.body.dataset.view = 'sources'")
         time.sleep(0.4)
-        ev(ws, "document.querySelector('.src-entry[data-scope=all]').click()")
+        ev(ws, "document.querySelector('.src-entry[data-scope=feed]').click()")
         time.sleep(3)
         print("桌面网格:", ev(ws, "getComputedStyle(document.querySelector('.layout')).gridTemplateColumns"))
         print("桌面条目高:", ev(ws, "Math.round(document.querySelector('.item').getBoundingClientRect().height)"),
