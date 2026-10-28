@@ -16,15 +16,21 @@
 |:---:|:---:|:---:|
 | <img src="docs/screenshots/01-sources.jpg" width="230"> | <img src="docs/screenshots/02-articles.jpg" width="230"> | <img src="docs/screenshots/03-expand.jpg" width="230"> |
 
-**收藏 / 侧边菜单 / 整理订阅 / 账号设置**
+**收藏 / 侧边菜单 / 订阅源信息**
 
-| ⭐️ 收藏 | 侧边菜单 | 整理订阅 | 账号设置（字体字号） |
-|:---:|:---:|:---:|:---:|
-| <img src="docs/screenshots/04-starred.jpg" width="200"> | <img src="docs/screenshots/05-menu.jpg" width="200"> | <img src="docs/screenshots/06-manage.jpg" width="200"> | <img src="docs/screenshots/07-settings.jpg" width="200"> |
+| ⭐️ 收藏 | 侧边菜单 | 订阅源信息（可改名/换组/删除） |
+|:---:|:---:|:---:|
+| <img src="docs/screenshots/04-starred.jpg" width="230"> | <img src="docs/screenshots/05-menu.jpg" width="230"> | <img src="docs/screenshots/06-feed-info.jpg" width="230"> |
+
+**整理订阅 / 账号设置**
+
+| 整理订阅（搜索 + 分组） | 账号设置（字体字号） |
+|:---:|:---:|
+| <img src="docs/screenshots/07-manage.jpg" width="230"> | <img src="docs/screenshots/08-settings.jpg" width="230"> |
 
 **桌面端**
 
-<img src="docs/screenshots/08-desktop.jpg" width="880">
+<img src="docs/screenshots/09-desktop.jpg" width="880">
 
 ---
 
@@ -297,6 +303,18 @@ node tests/run.mjs     # 核心逻辑单测（57 项）
 - `tests/ui_e2e.py`：无头 Chromium + CDP，60+ 项 UI 断言（本地库，`--reset-unread` 重置数据）
 - `tests/online_probe.py`：线上只读探针（截图 + 时间序/定位校验，不改数据）
 - `tests/dev_env.sh`：一键恢复本地开发环境（wrangler + 本地 D1 + 6 个种子源）
+
+---
+
+## 致谢
+
+界面设计致敬 **[蚁阅 · RSSAnt](https://gitee.com/anyant/rssant)**（[GitHub 镜像](https://github.com/anyant/rssant) ｜ 在线版 [rss.anyant.com](https://rss.anyant.com) ｜ 作者 Guyskk）。
+
+蚁阅是我用了很多年的 RSS 阅读器。它「无广告、无推荐、专注阅读、界面上只剩标题」的产品取向，以及纯文字列表 + 浅灰未读徽章 + 亮蓝强调色这套视觉语言，是本项目界面改版的直接参照——包括后来把这些年积累的坏习惯都改掉的极简版。
+
+本项目代码是独立实现的（Cloudflare Workers + D1、零运行时依赖），**没有使用蚁阅的任何源码**，只是照着它的样子做了一套自己部署得起的版本。想要功能完整、开箱即用的成品服务，直接用蚁阅就好。
+
+感谢 Guyskk 做出这样的产品。
 
 ---
 
