@@ -180,6 +180,26 @@
         </button>
       </div>
       <div class="modal-body">
+        <label class="field">
+          <span class="label">字体</span>
+          <select id="set-font" class="input">
+            <option value="system">系统默认</option>
+            <option value="sans">无衬线（鸿蒙 / MiSans / 苹方 / 思源黑体）</option>
+            <option value="serif">衬线（思源宋体 / 宋体）</option>
+            <option value="kai">楷体</option>
+            <option value="mono">等宽（更纱黑体 / JetBrains Mono）</option>
+          </select>
+        </label>
+        <label class="field">
+          <span class="label">字号</span>
+          <select id="set-scale" class="input">
+            <option value="0.9">小（90%）</option>
+            <option value="1">标准（100%）</option>
+            <option value="1.1">大（110%）</option>
+            <option value="1.25">特大（125%）</option>
+          </select>
+        </label>
+        <div class="divider"></div>
         <div class="hint">定时抓取由 Cloudflare Cron 执行：每 30 分钟一次，每次最多 40 个订阅源、并发 5；源超过 40 个时按「最久未抓」轮转。</div>
         <div class="divider"></div>
         <div class="field">

@@ -1032,6 +1032,38 @@
     } catch (err) { toast(err.message); }
   });
 
+  /* ------------------------------ 字体与字号 ------------------------------ */
+  const FONT_STACKS = {
+    system: '-apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Source Han Sans SC", "Noto Sans CJK SC", sans-serif',
+    sans: '"HarmonyOS Sans SC", "MiSans", "PingFang SC", "Source Han Sans SC", "Noto Sans SC", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif',
+    serif: '"Songti SC", "Source Han Serif SC", "Noto Serif SC", "SimSun", Georgia, serif',
+    kai: '"Kaiti SC", "STKaiti", "KaiTi", "楷体", "Songti SC", serif',
+    mono: '"Sarasa Mono SC", "JetBrains Mono", "Cascadia Code", Consolas, "Noto Sans Mono CJK SC", monospace',
+  };
+  const TYPO_KEY = 'ant.type';
+  let typo = { font: 'system', fs: 1 };
+
+  function applyTypo(next) {
+    typo = { font: next.font || 'system', fs: Number(next.fs) || 1 };
+    const root = document.documentElement;
+    const stack = FONT_STACKS[typo.font];
+    if (stack) root.style.setProperty('--font', stack);
+    else root.style.removeProperty('--font');
+    root.style.setProperty('--fs', String(typo.fs));
+    return typo;
+  }
+
+  function saveTypo(patch) {
+    applyTypo({ ...typo, ...patch });
+    try { localStorage.setItem(TYPO_KEY, JSON.stringify(typo)); } catch { /* 隐私模式忽略 */ }
+  }
+
+  (function initTypo() {
+    let saved = {};
+    try { saved = JSON.parse(localStorage.getItem(TYPO_KEY) || '{}'); } catch { saved = {}; }
+    applyTypo(saved);
+  })();
+
   /* ------------------------------ 主题 ------------------------------ */
   function applyTheme(theme) {
     document.documentElement.dataset.theme = theme;
@@ -1236,6 +1268,8 @@
 
   /* ------------------------------ 设置 ------------------------------ */
   function openSettings() {
+    $('#set-font').value = typo.font;
+    $('#set-scale').value = String(typo.fs);
     $('#set-oldpass').value = '';
     $('#set-newpass').value = '';
     $('#set-err').textContent = '';
@@ -1243,6 +1277,9 @@
       `订阅源 ${state.counts.feeds || 0} 个 · 文章 ${state.counts.items || 0} 篇 · 未读 ${state.counts.unread || 0} · 收藏 ${state.counts.starred || 0}`;
     el.modalSettings.hidden = false;
   }
+
+  $('#set-font').addEventListener('change', (e) => saveTypo({ font: e.target.value }));
+  $('#set-scale').addEventListener('change', (e) => saveTypo({ fs: parseFloat(e.target.value) }));
 
   $('#btn-save-settings').addEventListener('click', async () => {
     const oldPass = $('#set-oldpass').value;
