@@ -349,7 +349,7 @@ select.input { appearance: none; background-image: linear-gradient(45deg, transp
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
-.item.unread .it-title { color: var(--text); font-weight: 600; }
+.item.unread .it-title { color: var(--text); font-weight: 400; }
 /* 已读：标题转浅灰，与未读形成明显对比 */
 .item:not(.unread) .it-title { color: var(--text-3); font-weight: 400; }
 .item:not(.unread) .it-feed-mini { color: var(--text-4); }
