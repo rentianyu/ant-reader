@@ -178,7 +178,8 @@ def main():
         check("列表有条目", counts["n"] > 0, f"{counts['n']} 条（未读 {counts['unread']}，已读 {counts['read']}）")
         shot(ws, "m2-list.png")
 
-        print("== 点一条 → 只有它变已读（不连带清空） ==")
+        print("== 点一条 → 它和更旧的未读一起变已读 ==")
+        ev(ws, "window.confirm = () => true")
         before = counts["unread"]
         total_items = counts["n"]
         # 升序下点最后一条未读（最新的未读），先记下点击前的未读 id 集合
@@ -193,8 +194,8 @@ def main():
                   clickedRead: ex ? !ex.classList.contains('unread') : null};
         })()""")
         check("被点那篇变为已读", after["clickedRead"] is True, str(after["clickedRead"]))
-        kept = ev(ws, "(() => { const s = new Set([...document.querySelectorAll('.item.unread')].map(e => e.dataset.id)); return %s.filter(i => i !== '%s').every(i => s.has(i)); })()" % (json.dumps(unread_ids), clicked_id))
-        check("其余未读未被连带标记", kept is True, f"原 {len(unread_ids or [])} 条未读")
+        left = after["unread"]
+        check("比它旧的未读一起变已读（列表内清空）", left == 0, f"剩余 {left} 条未读（原 {len(unread_ids or [])} 条）")
         color = ev(ws, "getComputedStyle(document.querySelector('.item.expanded .it-title')).color")
         check("已读标题转浅灰", color not in ("rgb(34, 34, 34)", "rgb(0, 0, 0)"), color)
         shot(ws, "m3-read-one.png")

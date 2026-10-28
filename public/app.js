@@ -625,6 +625,8 @@
     if (listRect.bottom - cardRect.top < 420) {
       const delta = cardRect.top - listRect.top;
       if (Math.abs(delta) > 4) {
+        // 展开时的自动滚动不算「用户滚到顶部」，别顺手触发加载更早
+        suppressScrollLoad = Date.now() + 900;
         box.scrollTo({ top: Math.max(0, box.scrollTop + delta - 6), behavior: 'smooth' });
       }
       setTimeout(() => fitExpandedCard(id), 340);
@@ -642,6 +644,7 @@
 
   async function expandItem(id) {
     state.expandedId = id;
+    suppressScrollLoad = Date.now() + 900;
     renderItems();
     markItemRead(id);
     setTimeout(() => fitExpandedCard(id), 40);
@@ -660,18 +663,41 @@
     }
   }
 
-  /** 点击某篇：只把这一篇标为已读（不连带更早的，避免误清整列未读） */
+  /**
+   * 点击某篇：把它以及列表中比它更旧的未读一起标为已读（「读到这里」）。
+   * 下界取当前已加载列表中最旧的一条，避免误清视野之外的历史。
+   * 影响面过大（>30 篇）时先确认，防止误点清掉一大片。
+   */
   async function markItemRead(id) {
-    const it = state.items.find((x) => x.id === id);
-    if (!it || it.is_read) return;
-    it.is_read = 1;
-    const f = state.feeds.find((x) => x.id === it.feed_id);
-    if (f && f.unread > 0) f.unread -= 1;
-    state.counts.unread = Math.max(0, (state.counts.unread || 0) - 1);
+    const idx = state.items.findIndex((x) => x.id === id);
+    if (idx < 0) return;
+
+    let willChange = 0;
+    for (let i = 0; i <= idx; i++) if (!state.items[i].is_read) willChange++;
+    if (!willChange) return;
+    if (willChange > 30 && !confirm(`将把 ${willChange} 篇文章标为已读，确定？`)) return;
+
+    for (let i = 0; i <= idx; i++) {
+      const it = state.items[i];
+      if (it.is_read) continue;
+      it.is_read = 1;
+      const f = state.feeds.find((x) => x.id === it.feed_id);
+      if (f && f.unread > 0) f.unread -= 1;
+    }
+    state.counts.unread = Math.max(0, (state.counts.unread || 0) - willChange);
     renderItems();
     renderSources();
+
+    const first = state.items[0];
+    const body = { itemId: id, minTs: first ? (first.published_at || first.fetched_at || null) : null };
+    if (state.scope.type === 'feed') body.feedId = state.scope.id;
+    else if (state.scope.type === 'group') body.groupId = state.scope.id;
     try {
-      await api(`/items/${id}`, { method: 'PATCH', body: { read: true } });
+      const r = await api('/read-before', { method: 'POST', body });
+      if (r.feeds) state.feeds = r.feeds;
+      if (r.groups) state.groups = r.groups;
+      state.counts.unread = state.feeds.reduce((s, f) => s + (f.unread || 0), 0);
+      renderSources();
     } catch {
       /* 网络失败时本地已更新，下次加载会校准 */
     }

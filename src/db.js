@@ -190,6 +190,34 @@ export async function markAllRead(db, { feedId, groupId } = {}) {
   return res.meta?.changes || 0;
 }
 
+/**
+ * 把某篇文章及其更早的未读一次性标为已读。
+ * 范围由 feedId / groupId 决定，都不传则为全部订阅；
+ * minTs 是下界（前端传「当前已加载列表里最旧一条」的时间），避免误清视野外的历史。
+ */
+export async function markBefore(db, { itemId, feedId, groupId, minTs }) {
+  const item = await db.prepare(
+    'SELECT feed_id, COALESCE(published_at, fetched_at) AS ts FROM items WHERE id = ?',
+  ).bind(itemId).first();
+  if (!item) return { changed: 0, ts: null };
+
+  let sql = 'UPDATE items SET is_read = 1 WHERE is_read = 0 AND COALESCE(published_at, fetched_at) <= ?';
+  const binds = [item.ts];
+  if (minTs) {
+    sql += ' AND COALESCE(published_at, fetched_at) >= ?';
+    binds.push(minTs);
+  }
+  if (feedId) {
+    sql += ' AND feed_id = ?';
+    binds.push(feedId);
+  } else if (groupId) {
+    sql += ' AND feed_id IN (SELECT id FROM feeds WHERE group_id = ?)';
+    binds.push(groupId);
+  }
+  const res = await db.prepare(sql).bind(...binds).run();
+  return { changed: res.meta?.changes || 0, ts: item.ts };
+}
+
 export async function trimFeedItems(db, feedId, keep = 300) {
   const res = await db.prepare(`
     DELETE FROM items

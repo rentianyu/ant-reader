@@ -264,6 +264,25 @@ export async function handleApi(request, env, url) {
       }
     }
 
+    /** 把某篇及其更早的未读标为已读（下界 minTs 由前端按已加载列表给出） */
+    if (path === '/read-before' && method === 'POST') {
+      const body = await readJson(request);
+      const itemId = parseInt(body?.itemId, 10);
+      if (!itemId) return fail('缺少 itemId');
+      const r = await db.markBefore(env.DB, {
+        itemId,
+        feedId: body?.feedId ? parseInt(body.feedId, 10) : null,
+        groupId: body?.groupId ? parseInt(body.groupId, 10) : null,
+        minTs: body?.minTs ? parseInt(body.minTs, 10) : null,
+      });
+      return json({
+        ok: true,
+        changed: r.changed,
+        feeds: await db.listFeeds(env.DB),
+        groups: await db.listGroups(env.DB),
+      });
+    }
+
     if (path === '/read-all' && method === 'POST') {
       const body = await readJson(request);
       const changed = await db.markAllRead(env.DB, {
